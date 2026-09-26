@@ -76,7 +76,7 @@ public class NightmareRealms implements ModInitializer {
 		CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
 				dispatcher.register(CommandManager.literal("nightmarerealms")
 						.then(CommandManager.literal("start")
-								.requires(source -> source.hasPermission(2))
+								.requires(source -> true)
 								.executes(NightmareRealms::executeStart))));
 	}
 
