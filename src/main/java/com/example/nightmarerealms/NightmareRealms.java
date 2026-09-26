@@ -76,7 +76,7 @@ public class NightmareRealms implements ModInitializer {
 		CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
 				dispatcher.register(CommandManager.literal("nightmarerealms")
 						.then(CommandManager.literal("start")
-								.requires(source -> source.hasPermission (2))
+								.requires(source -> source.hasPermissionLevel(2))
 								.executes(NightmareRealms::executeStart))));
 	}
 
@@ -123,7 +123,7 @@ public class NightmareRealms implements ModInitializer {
 	private static void updatePhase1() {
 		if (!phase1Boss.isAlive()) {
 			// Move on to Phase 2 once the Shadow Sovereign falls.
-			startPhase2(phase1Boss.getEntityWorld(), phase1Boss.getBlockPos());
+			startPhase2((ServerWorld) phase1Boss.getWorld(), phase1Boss.getBlockPos());
 			return;
 		}
 		bossBar.setPercent(phase1Boss.getHealth() / phase1Boss.getMaxHealth());
@@ -156,7 +156,7 @@ public class NightmareRealms implements ModInitializer {
 	private static void updatePhase2() {
 		if (!phase2Boss.isAlive()) {
 			// Move on to the third and final phase.
-			startPhase3(phase2Boss.getEntityWorld(), phase2Boss.getBlockPos());
+			startPhase3((ServerWorld) phase2Boss.getWorld(), phase2Boss.getBlockPos());
 			return;
 		}
 		bossBar.setPercent(phase2Boss.getHealth() / phase2Boss.getMaxHealth());
