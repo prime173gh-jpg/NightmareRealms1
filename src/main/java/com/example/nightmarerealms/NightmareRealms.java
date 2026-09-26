@@ -4,10 +4,12 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.block.Blocks;
+import net.minecraft.component.DataComponentTypes;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.LightningEntity;
 import net.minecraft.entity.ItemEntity;
+import net.minecraft.entity.LightningEntity;
+import net.minecraft.entity.SpawnReason;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.boss.BossBar;
 import net.minecraft.entity.boss.ServerBossBar;
@@ -92,7 +94,6 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setColor(BossBar.Color.PURPLE);
 		bossBar.setVisible(true);
 
-		// 1. بناء الساحة الخاصة بالمرحلة الأولى (End Arena)
 		buildArena(world, pos, Blocks.CRYING_OBSIDIAN, Blocks.OBSIDIAN);
 
 		phase1Boss = new EndermanEntity(EntityType.ENDERMAN, world);
@@ -114,14 +115,12 @@ public class NightmareRealms implements ModInitializer {
 		}
 		bossBar.setPercent(phase1Boss.getHealth() / phase1Boss.getMaxHealth());
 
-		// مهارة إندرمان: ضربات صاعقة كل 5 ثوانٍ وإعطاء تأثير الطيران للاستفزاز
 		if (tickCounter % 100 == 0) {
 			ServerWorld world = (ServerWorld) phase1Boss.getEntityWorld();
-			LightningEntity lightning = EntityType.LIGHTNING_BOLT.create(world);
-			if (lightning != null) {
-				lightning.refreshPositionAfterChangingDimensions(phase1Boss.getPos());
-				world.spawnEntity(lightning);
-			}
+			LightningEntity lightning = new LightningEntity(EntityType.LIGHTNING_BOLT, world);
+			lightning.refreshPositionAndAngles(phase1Boss.getBlockPos(), 0, 0);
+			world.spawnEntity(lightning);
+
 			if (phase1Boss.getTarget() instanceof ServerPlayerEntity player) {
 				player.addStatusEffect(new StatusEffectInstance(StatusEffects.LEVITATION, 60, 1));
 			}
@@ -135,7 +134,6 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setName(Text.literal("Dread Knight - Phase II").formatted(Formatting.DARK_RED, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.RED);
 
-		// 2. تغيير الساحة لساحة النذر (Nether Arena)
 		buildArena(world, pos, Blocks.NETHER_BRICKS, Blocks.MAGMA_BLOCK);
 
 		phase2Boss = new WitherSkeletonEntity(EntityType.WITHER_SKELETON, world);
@@ -145,7 +143,6 @@ public class NightmareRealms implements ModInitializer {
 		phase2Boss.setHealth(450.0f);
 		phase2Boss.getAttributeInstance(EntityAttributes.ATTACK_DAMAGE).setBaseValue(18.0);
 
-		// تجهيز البوس بدروع وعتاد أسطوري
 		phase2Boss.equipStack(EquipmentSlot.MAINHAND, new ItemStack(Items.NETHERITE_SWORD));
 		phase2Boss.equipStack(EquipmentSlot.CHEST, new ItemStack(Items.NETHERITE_CHESTPLATE));
 		phase2Boss.equipStack(EquipmentSlot.HEAD, new ItemStack(Items.WITHER_SKELETON_SKULL));
@@ -162,7 +159,6 @@ public class NightmareRealms implements ModInitializer {
 		}
 		bossBar.setPercent(phase2Boss.getHealth() / phase2Boss.getMaxHealth());
 
-		// مهارة الـ Wither: إطلاق كرات نار متفجرة كل 4 ثوانٍ
 		if (tickCounter % 80 == 0 && phase2Boss.getTarget() != null) {
 			ServerWorld world = (ServerWorld) phase2Boss.getEntityWorld();
 			Vec3d lookVec = phase2Boss.getRotationVec(1.0F);
@@ -193,7 +189,6 @@ public class NightmareRealms implements ModInitializer {
 
 	private static void updatePhase3() {
 		if (!phase3Boss.isAlive()) {
-			// عند الفوز: توزيع الغنائم والموارد الأسطورية
 			dropLegendaryLoot((ServerWorld) phase3Boss.getEntityWorld(), phase3Boss.getBlockPos());
 
 			currentPhase = 0;
@@ -204,7 +199,6 @@ public class NightmareRealms implements ModInitializer {
 		}
 		bossBar.setPercent(phase3Boss.getHealth() / phase3Boss.getMaxHealth());
 
-		// مهارة الفانتوم النهائي: إحداث انفجار سحري وتأثير الأعمى كل 6 ثوانٍ
 		if (tickCounter % 120 == 0 && phase3Boss.getTarget() instanceof ServerPlayerEntity player) {
 			ServerWorld world = (ServerWorld) phase3Boss.getEntityWorld();
 			world.createExplosion(phase3Boss, player.getX(), player.getY(), player.getZ(), 2.0f, ServerWorld.ExplosionSourceType.NONE);
@@ -212,18 +206,14 @@ public class NightmareRealms implements ModInitializer {
 		}
 	}
 
-	// أداة بناء المقر/الساحة حول الموقع
 	private static void buildArena(ServerWorld world, BlockPos center, net.minecraft.block.Block floorBlock, net.minecraft.block.Block wallBlock) {
 		int radius = 6;
 		for (int x = -radius; x <= radius; x++) {
 			for (int z = -radius; z <= radius; z++) {
-				// أرضية الساحة
 				world.setBlockState(center.add(x, -1, z), floorBlock.getDefaultState());
-				// تفريغ الهواء بالداخل
 				for (int y = 0; y <= 4; y++) {
 					world.setBlockState(center.add(x, y, z), Blocks.AIR.getDefaultState());
 				}
-				// إحاطة بأعمدة دائرية
 				if (Math.abs(x) == radius || Math.abs(z) == radius) {
 					world.setBlockState(center.add(x, 0, z), wallBlock.getDefaultState());
 					world.setBlockState(center.add(x, 1, z), wallBlock.getDefaultState());
@@ -232,13 +222,10 @@ public class NightmareRealms implements ModInitializer {
 		}
 	}
 
-	// نظام إسقاط الغنائم المخصصة والأسطورية
 	private static void dropLegendaryLoot(ServerWorld world, BlockPos pos) {
-		// 1. سيف Netherite مطوّر ومجهّز
 		ItemStack superSword = new ItemStack(Items.NETHERITE_SWORD);
-		superSword.setCustomName(Text.literal("سيف قاهر الكوابيس").formatted(Formatting.GOLD, Formatting.BOLD));
+		superSword.set(DataComponentTypes.CUSTOM_NAME, Text.literal("سيف قاهر الكوابيس").formatted(Formatting.GOLD, Formatting.BOLD));
 
-		// 2. توتم الحماية والألماسات وNetherite Ingot
 		ItemStack totems = new ItemStack(Items.TOTEM_OF_UNDYING, 2);
 		ItemStack diamonds = new ItemStack(Items.DIAMOND, 16);
 		ItemStack netherite = new ItemStack(Items.NETHERITE_INGOT, 4);
