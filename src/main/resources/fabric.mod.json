@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "nightmarerealms",
+  "version": "${version}",
+  "name": "Nightmare Realms",
+  "description": "A three-phase custom boss fight: the Nightmare Sovereign shifts from a Shadow Form, into a Nether Dread knight, into a final Sky Terror form.",
+  "authors": [
+    "You"
+  ],
+  "contact": {},
+  "license": "CC0-1.0",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.example.nightmarerealms.NightmareRealms"
+    ]
+  },
+  "mixins": [],
+  "depends": {
+    "fabricloader": ">=0.18.4",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
