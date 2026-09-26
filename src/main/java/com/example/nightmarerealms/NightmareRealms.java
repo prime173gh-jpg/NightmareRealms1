@@ -3,14 +3,20 @@ package com.example.nightmarerealms;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.minecraft.block.Blocks;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.entity.LightningEntity;
+import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.boss.BossBar;
 import net.minecraft.entity.boss.ServerBossBar;
+import net.minecraft.entity.effect.StatusEffectInstance;
+import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.mob.EndermanEntity;
 import net.minecraft.entity.mob.PhantomEntity;
 import net.minecraft.entity.mob.WitherSkeletonEntity;
+import net.minecraft.entity.projectile.FireballEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.server.command.CommandManager;
@@ -20,49 +26,30 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Vec3d;
 
-/**
- * Nightmare Realms - a three-phase custom boss fight.
- *
- * Phase 1: Shadow Sovereign (Enderman form)
- * Phase 2: Dread Knight (Wither Skeleton form, netherite-equipped)
- * Phase 3: Apex Phantom (giant flying finale)
- *
- * Ported to Fabric for Minecraft 1.21.11 / Yarn mappings 1.21.11+build.4.
- * Notable changes from older (~1.20) Yarn code this was adapted from:
- *   - EntityAttributes.GENERIC_MAX_HEALTH / GENERIC_ATTACK_DAMAGE were renamed
- *     to EntityAttributes.MAX_HEALTH / EntityAttributes.ATTACK_DAMAGE (the
- *     "generic." prefix was dropped from vanilla attribute IDs).
- *   - Entity#getWorld() is deprecated in favor of Entity#getEntityWorld().
- *   - Bosses are now spawned with the entity's own (EntityType, World)
- *     constructor rather than EntityType#create(World), since the static
- *     factory method's parameters have changed across versions while the
- *     constructor has stayed stable.
- */
 public class NightmareRealms implements ModInitializer {
 
 	public static final String MOD_ID = "nightmarerealms";
 
 	private static ServerBossBar bossBar;
-
-	// The three stages of the boss fight: 0 = not started, 1 = Enderman,
-	// 2 = Mini Boss, 3 = Final Boss.
 	private static int currentPhase = 0;
+	private static int tickCounter = 0;
+
 	private static EndermanEntity phase1Boss;
 	private static WitherSkeletonEntity phase2Boss;
 	private static PhantomEntity phase3Boss;
 
 	@Override
 	public void onInitialize() {
-		// Main health bar for the boss fight.
 		bossBar = new ServerBossBar(
 				Text.literal("Nightmare Sovereign - Phase I").formatted(Formatting.DARK_PURPLE, Formatting.BOLD),
 				BossBar.Color.PURPLE,
 				BossBar.Style.NOTCHED_10
 		);
 
-		// Drive the boss fight's phase transitions every server tick.
 		ServerTickEvents.END_SERVER_TICK.register(server -> {
+			tickCounter++;
 			if (currentPhase == 1 && phase1Boss != null) {
 				updatePhase1();
 			} else if (currentPhase == 2 && phase2Boss != null) {
@@ -72,7 +59,6 @@ public class NightmareRealms implements ModInitializer {
 			}
 		});
 
-		// /nightmarerealms start - begins the fight at the player's position.
 		CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
 				dispatcher.register(CommandManager.literal("nightmarerealms")
 						.then(CommandManager.literal("start")
@@ -95,26 +81,27 @@ public class NightmareRealms implements ModInitializer {
 		}
 
 		startBossFight(source.getWorld(), player.getBlockPos(), player);
-		source.sendFeedback(() -> Text.translatable("nightmarerealms.command.start")
-				.formatted(Formatting.DARK_PURPLE), true);
+		source.sendFeedback(() -> Text.literal("حقبة الكوابيس قد بدأت! استعد للقتال!").formatted(Formatting.DARK_RED, Formatting.BOLD), true);
 		return 1;
 	}
 
-	// Starts the fight (Phase 1: Enderman Boss).
 	public static void startBossFight(ServerWorld world, BlockPos pos, ServerPlayerEntity player) {
 		currentPhase = 1;
 		bossBar.addPlayer(player);
-		bossBar.setName(Text.literal("Nightmare Sovereign - Phase I (Shadow Form)").formatted(Formatting.DARK_PURPLE, Formatting.BOLD));
+		bossBar.setName(Text.literal("Shadow Sovereign - Phase I").formatted(Formatting.DARK_PURPLE, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.PURPLE);
 		bossBar.setVisible(true);
 
+		// 1. بناء الساحة الخاصة بالمرحلة الأولى (End Arena)
+		buildArena(world, pos, Blocks.CRYING_OBSIDIAN, Blocks.OBSIDIAN);
+
 		phase1Boss = new EndermanEntity(EntityType.ENDERMAN, world);
-		phase1Boss.refreshPositionAndAngles(pos, 0, 0);
+		phase1Boss.refreshPositionAndAngles(pos.up(1), 0, 0);
 
 		phase1Boss.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(300.0);
 		phase1Boss.setHealth(300.0f);
 		phase1Boss.getAttributeInstance(EntityAttributes.ATTACK_DAMAGE).setBaseValue(12.0);
-		phase1Boss.setCustomName(Text.literal("Shadow Sovereign").formatted(Formatting.DARK_PURPLE));
+		phase1Boss.setCustomName(Text.literal("Shadow Sovereign").formatted(Formatting.DARK_PURPLE, Formatting.BOLD));
 		phase1Boss.setCustomNameVisible(true);
 
 		world.spawnEntity(phase1Boss);
@@ -122,32 +109,47 @@ public class NightmareRealms implements ModInitializer {
 
 	private static void updatePhase1() {
 		if (!phase1Boss.isAlive()) {
-			// Move on to Phase 2 once the Shadow Sovereign falls.
-			startPhase2((net.minecraft.server.world.ServerWorld) phase1Boss.getEntityWorld(), phase1Boss.getBlockPos());
+			startPhase2((ServerWorld) phase1Boss.getEntityWorld(), phase1Boss.getBlockPos());
 			return;
 		}
 		bossBar.setPercent(phase1Boss.getHealth() / phase1Boss.getMaxHealth());
+
+		// مهارة إندرمان: ضربات صاعقة كل 5 ثوانٍ وإعطاء تأثير الطيران للاستفزاز
+		if (tickCounter % 100 == 0) {
+			ServerWorld world = (ServerWorld) phase1Boss.getEntityWorld();
+			LightningEntity lightning = EntityType.LIGHTNING_BOLT.create(world);
+			if (lightning != null) {
+				lightning.refreshPositionAfterChangingDimensions(phase1Boss.getPos());
+				world.spawnEntity(lightning);
+			}
+			if (phase1Boss.getTarget() instanceof ServerPlayerEntity player) {
+				player.addStatusEffect(new StatusEffectInstance(StatusEffects.LEVITATION, 60, 1));
+			}
+		}
 	}
 
-	// Phase 2: Wither Skeleton Boss (Mini Boss).
 	private static void startPhase2(ServerWorld world, BlockPos pos) {
 		currentPhase = 2;
 		phase1Boss = null;
 
-		bossBar.setName(Text.literal("Nightmare Sovereign - Phase II (Nether Dread)").formatted(Formatting.DARK_RED, Formatting.BOLD));
+		bossBar.setName(Text.literal("Dread Knight - Phase II").formatted(Formatting.DARK_RED, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.RED);
 
+		// 2. تغيير الساحة لساحة النذر (Nether Arena)
+		buildArena(world, pos, Blocks.NETHER_BRICKS, Blocks.MAGMA_BLOCK);
+
 		phase2Boss = new WitherSkeletonEntity(EntityType.WITHER_SKELETON, world);
-		phase2Boss.refreshPositionAndAngles(pos, 0, 0);
+		phase2Boss.refreshPositionAndAngles(pos.up(1), 0, 0);
 
 		phase2Boss.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(450.0);
 		phase2Boss.setHealth(450.0f);
 		phase2Boss.getAttributeInstance(EntityAttributes.ATTACK_DAMAGE).setBaseValue(18.0);
 
-		// Give it strong gear.
+		// تجهيز البوس بدروع وعتاد أسطوري
 		phase2Boss.equipStack(EquipmentSlot.MAINHAND, new ItemStack(Items.NETHERITE_SWORD));
 		phase2Boss.equipStack(EquipmentSlot.CHEST, new ItemStack(Items.NETHERITE_CHESTPLATE));
-		phase2Boss.setCustomName(Text.literal("Dread Knight").formatted(Formatting.RED));
+		phase2Boss.equipStack(EquipmentSlot.HEAD, new ItemStack(Items.WITHER_SKELETON_SKULL));
+		phase2Boss.setCustomName(Text.literal("Dread Knight").formatted(Formatting.RED, Formatting.BOLD));
 		phase2Boss.setCustomNameVisible(true);
 
 		world.spawnEntity(phase2Boss);
@@ -155,28 +157,35 @@ public class NightmareRealms implements ModInitializer {
 
 	private static void updatePhase2() {
 		if (!phase2Boss.isAlive()) {
-			// Move on to the third and final phase.
-			startPhase3((net.minecraft.server.world.ServerWorld) phase2Boss.getEntityWorld(), phase2Boss.getBlockPos());
+			startPhase3((ServerWorld) phase2Boss.getEntityWorld(), phase2Boss.getBlockPos());
 			return;
 		}
 		bossBar.setPercent(phase2Boss.getHealth() / phase2Boss.getMaxHealth());
+
+		// مهارة الـ Wither: إطلاق كرات نار متفجرة كل 4 ثوانٍ
+		if (tickCounter % 80 == 0 && phase2Boss.getTarget() != null) {
+			ServerWorld world = (ServerWorld) phase2Boss.getEntityWorld();
+			Vec3d lookVec = phase2Boss.getRotationVec(1.0F);
+			FireballEntity fireball = new FireballEntity(world, phase2Boss, lookVec, 1);
+			fireball.setPosition(phase2Boss.getX() + lookVec.x, phase2Boss.getBodyY(0.5), phase2Boss.getZ() + lookVec.z);
+			world.spawnEntity(fireball);
+		}
 	}
 
-	// Phase 3: Giant Phantom (Final Boss).
 	private static void startPhase3(ServerWorld world, BlockPos pos) {
 		currentPhase = 3;
 		phase2Boss = null;
 
-		bossBar.setName(Text.literal("Nightmare Sovereign - Final Form (Sky Terror)").formatted(Formatting.BLUE, Formatting.BOLD));
+		bossBar.setName(Text.literal("Apex Phantom - Final Phase").formatted(Formatting.BLUE, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.BLUE);
 
 		phase3Boss = new PhantomEntity(EntityType.PHANTOM, world);
-		phase3Boss.refreshPositionAndAngles(pos.up(5), 0, 0);
+		phase3Boss.refreshPositionAndAngles(pos.up(8), 0, 0);
 
 		phase3Boss.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(600.0);
 		phase3Boss.setHealth(600.0f);
 		phase3Boss.getAttributeInstance(EntityAttributes.ATTACK_DAMAGE).setBaseValue(25.0);
-		phase3Boss.setCustomName(Text.literal("Apex Phantom").formatted(Formatting.BLUE));
+		phase3Boss.setCustomName(Text.literal("Apex Phantom").formatted(Formatting.BLUE, Formatting.BOLD));
 		phase3Boss.setCustomNameVisible(true);
 
 		world.spawnEntity(phase3Boss);
@@ -184,7 +193,9 @@ public class NightmareRealms implements ModInitializer {
 
 	private static void updatePhase3() {
 		if (!phase3Boss.isAlive()) {
-			// The boss fight has been won.
+			// عند الفوز: توزيع الغنائم والموارد الأسطورية
+			dropLegendaryLoot((ServerWorld) phase3Boss.getEntityWorld(), phase3Boss.getBlockPos());
+
 			currentPhase = 0;
 			bossBar.setVisible(false);
 			bossBar.clearPlayers();
@@ -192,5 +203,49 @@ public class NightmareRealms implements ModInitializer {
 			return;
 		}
 		bossBar.setPercent(phase3Boss.getHealth() / phase3Boss.getMaxHealth());
+
+		// مهارة الفانتوم النهائي: إحداث انفجار سحري وتأثير الأعمى كل 6 ثوانٍ
+		if (tickCounter % 120 == 0 && phase3Boss.getTarget() instanceof ServerPlayerEntity player) {
+			ServerWorld world = (ServerWorld) phase3Boss.getEntityWorld();
+			world.createExplosion(phase3Boss, player.getX(), player.getY(), player.getZ(), 2.0f, ServerWorld.ExplosionSourceType.NONE);
+			player.addStatusEffect(new StatusEffectInstance(StatusEffects.BLINDNESS, 80, 0));
+		}
+	}
+
+	// أداة بناء المقر/الساحة حول الموقع
+	private static void buildArena(ServerWorld world, BlockPos center, net.minecraft.block.Block floorBlock, net.minecraft.block.Block wallBlock) {
+		int radius = 6;
+		for (int x = -radius; x <= radius; x++) {
+			for (int z = -radius; z <= radius; z++) {
+				// أرضية الساحة
+				world.setBlockState(center.add(x, -1, z), floorBlock.getDefaultState());
+				// تفريغ الهواء بالداخل
+				for (int y = 0; y <= 4; y++) {
+					world.setBlockState(center.add(x, y, z), Blocks.AIR.getDefaultState());
+				}
+				// إحاطة بأعمدة دائرية
+				if (Math.abs(x) == radius || Math.abs(z) == radius) {
+					world.setBlockState(center.add(x, 0, z), wallBlock.getDefaultState());
+					world.setBlockState(center.add(x, 1, z), wallBlock.getDefaultState());
+				}
+			}
+		}
+	}
+
+	// نظام إسقاط الغنائم المخصصة والأسطورية
+	private static void dropLegendaryLoot(ServerWorld world, BlockPos pos) {
+		// 1. سيف Netherite مطوّر ومجهّز
+		ItemStack superSword = new ItemStack(Items.NETHERITE_SWORD);
+		superSword.setCustomName(Text.literal("سيف قاهر الكوابيس").formatted(Formatting.GOLD, Formatting.BOLD));
+
+		// 2. توتم الحماية والألماسات وNetherite Ingot
+		ItemStack totems = new ItemStack(Items.TOTEM_OF_UNDYING, 2);
+		ItemStack diamonds = new ItemStack(Items.DIAMOND, 16);
+		ItemStack netherite = new ItemStack(Items.NETHERITE_INGOT, 4);
+
+		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), superSword));
+		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), totems));
+		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), diamonds));
+		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), netherite));
 	}
 }
