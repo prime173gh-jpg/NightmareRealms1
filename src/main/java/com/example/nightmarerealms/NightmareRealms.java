@@ -5,6 +5,8 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.block.Blocks;
 import net.minecraft.component.DataComponentTypes;
+import net.minecraft.enchantment.Enchantment;
+import net.minecraft.enchantment.Enchantments;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.ItemEntity;
@@ -14,16 +16,15 @@ import net.minecraft.entity.boss.ServerBossBar;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.mob.EndermanEntity;
+import net.minecraft.entity.mob.SkeletonEntity;
 import net.minecraft.entity.mob.WardenEntity;
 import net.minecraft.entity.mob.WitherSkeletonEntity;
-import net.minecraft.entity.mob.SkeletonEntity;
 import net.minecraft.entity.projectile.FireballEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
+import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.enchantment.Enchantment;
-import net.minecraft.enchantment.Enchantments;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -32,6 +33,8 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
+
+import java.util.Optional;
 
 public class NightmareRealms implements ModInitializer {
 
@@ -332,8 +335,8 @@ public class NightmareRealms implements ModInitializer {
 		}
 	}
 
-	private static RegistryEntry<Enchantment> getEnchantment(ServerWorld world, net.minecraft.registry.RegistryKey<Enchantment> key) {
-		return world.getRegistryManager().getOrEmpty(RegistryKeys.ENCHANTMENT).flatMap(registry -> registry.getEntry(key)).orElse(null);
+	private static RegistryEntry<Enchantment> getEnchantment(ServerWorld world, RegistryKey<Enchantment> key) {
+		return world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT).getOptional(key).orElse(null);
 	}
 
 	private static void dropPhase1Loot(ServerWorld world, BlockPos pos) {
