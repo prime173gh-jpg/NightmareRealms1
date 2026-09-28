@@ -34,8 +34,6 @@ import net.minecraft.util.Formatting;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 
-import java.util.Optional;
-
 public class NightmareRealms implements ModInitializer {
 
 	public static final String MOD_ID = "nightmarerealms";
@@ -61,7 +59,6 @@ public class NightmareRealms implements ModInitializer {
 		ServerTickEvents.END_SERVER_TICK.register(server -> {
 			tickCounter++;
 
-			// إدارة فترة الراحة (الـ 10 ثواني بين المراحل)
 			if (cooldownTimer > 0) {
 				cooldownTimer--;
 				if (cooldownTimer % 20 == 0) {
@@ -118,10 +115,10 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setColor(BossBar.Color.PURPLE);
 		bossBar.setVisible(true);
 
-		buildEnclosedArena(world, pos, Blocks.CRYING_OBSIDIAN, Blocks.TINTED_GLASS);
+		buildEnclosedArena(world, pos, Blocks.CRYING_OBSIDIAN, Blocks.TINTED_GLASS, 7, 6);
 
 		phase1Boss = new EndermanEntity(EntityType.ENDERMAN, world);
-		phase1Boss.refreshPositionAndAngles(pos.up(1), 0, 0);
+		phase1Boss.refreshPositionAndAngles(pos.getX() + 0.5, pos.getY() + 1, pos.getZ() + 0.5, 0, 0);
 
 		phase1Boss.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(300.0);
 		phase1Boss.setHealth(300.0f);
@@ -140,22 +137,19 @@ public class NightmareRealms implements ModInitializer {
 		}
 		bossBar.setPercent(phase1Boss.getHealth() / phase1Boss.getMaxHealth());
 
-		// 1. علاجات كل 15 ثانية (4% من الصحة)
 		if (tickCounter % 300 == 0) {
 			healBoss(phase1Boss, 300.0, 0.04);
 		}
 
-		// 2. زيادة سرعة الانتقال التلغرافي (Teleport Speed)
 		if (tickCounter % 40 == 0 && phase1Boss.getTarget() != null) {
 			ServerWorld world = (ServerWorld) phase1Boss.getEntityWorld();
 			BlockPos targetPos = phase1Boss.getTarget().getBlockPos().add(world.random.nextInt(5) - 2, 0, world.random.nextInt(5) - 2);
 			phase1Boss.teleport(targetPos.getX(), targetPos.getY(), targetPos.getZ(), true);
 		}
 
-		// 3. ضربة مؤكدة كل 13 ثانية (260 ticks) - Shadow Burst
 		if (tickCounter % 260 == 0 && phase1Boss.getTarget() instanceof ServerPlayerEntity player) {
 			ServerWorld world = (ServerWorld) phase1Boss.getEntityWorld();
-			player.damage(world, world.getDamageSources().magic(), 12.0f); // 6 قلوب ضرر مؤكد
+			player.damage(world, world.getDamageSources().magic(), 12.0f);
 			player.addStatusEffect(new StatusEffectInstance(StatusEffects.BLINDNESS, 60, 0));
 			player.sendMessage(Text.literal("اصابتك ضربة الانفجار الظلي للملك!").formatted(Formatting.DARK_PURPLE), true);
 		}
@@ -174,10 +168,10 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setName(Text.literal("Dread Knight - Phase II").formatted(Formatting.DARK_RED, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.RED);
 
-		buildEnclosedArena(world, arenaCenter, Blocks.NETHER_BRICKS, Blocks.RED_STAINED_GLASS);
+		buildEnclosedArena(world, arenaCenter, Blocks.NETHER_BRICKS, Blocks.RED_STAINED_GLASS, 7, 6);
 
 		phase2Boss = new WitherSkeletonEntity(EntityType.WITHER_SKELETON, world);
-		phase2Boss.refreshPositionAndAngles(arenaCenter.up(1), 0, 0);
+		phase2Boss.refreshPositionAndAngles(arenaCenter.getX() + 0.5, arenaCenter.getY() + 1, arenaCenter.getZ() + 0.5, 0, 0);
 
 		phase2Boss.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(450.0);
 		phase2Boss.setHealth(450.0f);
@@ -199,12 +193,10 @@ public class NightmareRealms implements ModInitializer {
 		}
 		bossBar.setPercent(phase2Boss.getHealth() / phase2Boss.getMaxHealth());
 
-		// 1. علاج كل 15 ثانية (4% من الصحة)
 		if (tickCounter % 300 == 0) {
 			healBoss(phase2Boss, 450.0, 0.04);
 		}
 
-		// 2. إطلاق فاير بول
 		if (tickCounter % 80 == 0 && phase2Boss.getTarget() != null) {
 			ServerWorld world = (ServerWorld) phase2Boss.getEntityWorld();
 			Vec3d lookVec = phase2Boss.getRotationVec(1.0F);
@@ -213,7 +205,6 @@ public class NightmareRealms implements ModInitializer {
 			world.spawnEntity(fireball);
 		}
 
-		// 3. استدعاء جنود
 		if (tickCounter % 200 == 0) {
 			ServerWorld world = (ServerWorld) phase2Boss.getEntityWorld();
 			for (int i = 0; i < 2; i++) {
@@ -231,22 +222,29 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setName(Text.literal("Nightmare Warden - Final Phase").formatted(Formatting.DARK_AQUA, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.BLUE);
 
-		buildEnclosedArena(world, arenaCenter, Blocks.REINFORCED_DEEPSLATE, Blocks.BLACK_STAINED_GLASS);
+		// حلبة 15x15 مستوحاة من Deep Dark Cave (15x15 = نصف القطر 7)
+		buildEnclosedArena(world, arenaCenter, Blocks.SCULK, Blocks.REINFORCED_DEEPSLATE, 7, 7);
 
 		phase3Boss = new WardenEntity(EntityType.WARDEN, world);
-		phase3Boss.refreshPositionAndAngles(arenaCenter.up(1), 0, 0);
+		phase3Boss.refreshPositionAndAngles(arenaCenter.getX() + 0.5, arenaCenter.getY() + 1, arenaCenter.getZ() + 0.5, 0, 0);
 
 		phase3Boss.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(600.0);
 		phase3Boss.setHealth(600.0f);
-		phase3Boss.getAttributeInstance(EntityAttributes.ATTACK_DAMAGE).setBaseValue(12.0);
+		phase3Boss.getAttributeInstance(EntityAttributes.ATTACK_DAMAGE).setBaseValue(18.0);
 		phase3Boss.setCustomName(Text.literal("Nightmare Warden").formatted(Formatting.DARK_AQUA, Formatting.BOLD));
 		phase3Boss.setCustomNameVisible(true);
 
 		phase3Boss.setPersistent();
+
+		// نقل اللاعب فوراً لمنتصف الحلبة مع إعطائه تأثير Darkness
 		if (!bossBar.getPlayers().isEmpty()) {
 			ServerPlayerEntity targetPlayer = bossBar.getPlayers().iterator().next();
+			targetPlayer.teleport(world, arenaCenter.getX() + 0.5, arenaCenter.getY() + 1, arenaCenter.getZ() + 3.0, targetPlayer.getYaw(), targetPlayer.getPitch());
+			targetPlayer.addStatusEffect(new StatusEffectInstance(StatusEffects.DARKNESS, 1200, 0));
+
+			// إجبار الواردن على استهداف وغضب اللاعب
 			phase3Boss.setTarget(targetPlayer);
-			phase3Boss.increaseAngerAt(targetPlayer, 150, true);
+			phase3Boss.increaseAngerAt(targetPlayer, 350, true);
 		}
 
 		world.spawnEntity(phase3Boss);
@@ -264,49 +262,46 @@ public class NightmareRealms implements ModInitializer {
 		}
 		bossBar.setPercent(phase3Boss.getHealth() / phase3Boss.getMaxHealth());
 
-		if (tickCounter % 20 == 0 && !bossBar.getPlayers().isEmpty()) {
+		// المحافظة المستمرة على غضب الواردن
+		if (!bossBar.getPlayers().isEmpty()) {
 			ServerPlayerEntity targetPlayer = bossBar.getPlayers().iterator().next();
-			phase3Boss.increaseAngerAt(targetPlayer, 50, false);
+			if (phase3Boss.getTarget() == null) {
+				phase3Boss.setTarget(targetPlayer);
+			}
+			phase3Boss.increaseAngerAt(targetPlayer, 100, false);
 		}
 
-		// 1. علاج كل 15 ثانية (4% من الصحة)
+		// 1. علاج كل 15 ثانية
 		if (tickCounter % 300 == 0) {
 			healBoss(phase3Boss, 600.0, 0.04);
 		}
 
-		// 2. إطلاق Sonic Boom رئيسية كل 8 ثواني
-		if (tickCounter % 160 == 0 && phase3Boss.getTarget() instanceof ServerPlayerEntity player) {
+		// 2. هجوم الصوت المباشر (Sonic Boom Damage) كل 6 ثوانٍ
+		if (tickCounter % 120 == 0 && phase3Boss.getTarget() instanceof ServerPlayerEntity player) {
 			ServerWorld world = (ServerWorld) phase3Boss.getEntityWorld();
 			if (phase3Boss.squaredDistanceTo(player) < 225.0) {
-				player.damage(world, world.getDamageSources().sonicBoom(phase3Boss), 15.0f);
-				world.sendEntityStatus(phase3Boss, (byte) 62);
+				player.damage(world, world.getDamageSources().sonicBoom(phase3Boss), 16.0f);
+				world.sendEntityStatus(phase3Boss, (byte) 62); // تشغيل أنيميشن الصوت
 			}
 		}
 
-		// 3. استدعاء صغار Wardens كـ Minions
+		// 3. استدعاء Warden Minion غاضب أيضاً
 		if (tickCounter % 400 == 0) {
 			ServerWorld world = (ServerWorld) phase3Boss.getEntityWorld();
 			WardenEntity minionWarden = new WardenEntity(EntityType.WARDEN, world);
 			minionWarden.refreshPositionAndAngles(phase3Boss.getBlockPos().add(2, 0, 2), 0, 0);
-			minionWarden.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(100.0);
-			minionWarden.setHealth(100.0f);
-			minionWarden.getAttributeInstance(EntityAttributes.ATTACK_DAMAGE).setBaseValue(4.0);
+			minionWarden.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(120.0);
+			minionWarden.setHealth(120.0f);
+			minionWarden.getAttributeInstance(EntityAttributes.ATTACK_DAMAGE).setBaseValue(8.0);
 			minionWarden.setCustomName(Text.literal("Warden Minion").formatted(Formatting.GRAY));
 			minionWarden.setPersistent();
 
-			if (phase3Boss.getTarget() != null) {
-				minionWarden.setTarget(phase3Boss.getTarget());
-				minionWarden.increaseAngerAt(phase3Boss.getTarget(), 100, true);
+			if (phase3Boss.getTarget() instanceof ServerPlayerEntity player) {
+				minionWarden.setTarget(player);
+				minionWarden.increaseAngerAt(player, 300, true);
 			}
 
 			world.spawnEntity(minionWarden);
-
-			if (phase3Boss.getTarget() instanceof ServerPlayerEntity player) {
-				double dist = minionWarden.squaredDistanceTo(player);
-				if (dist < 80.0) {
-					player.damage(world, world.getDamageSources().sonicBoom(minionWarden), 4.5f);
-				}
-			}
 		}
 	}
 
@@ -315,10 +310,7 @@ public class NightmareRealms implements ModInitializer {
 		boss.heal(healAmount);
 	}
 
-	private static void buildEnclosedArena(ServerWorld world, BlockPos center, net.minecraft.block.Block floorBlock, net.minecraft.block.Block wallBlock) {
-		int radius = 7;
-		int height = 7;
-
+	private static void buildEnclosedArena(ServerWorld world, BlockPos center, net.minecraft.block.Block floorBlock, net.minecraft.block.Block wallBlock, int radius, int height) {
 		for (int x = -radius; x <= radius; x++) {
 			for (int z = -radius; z <= radius; z++) {
 				world.setBlockState(center.add(x, -1, z), floorBlock.getDefaultState());
@@ -366,24 +358,20 @@ public class NightmareRealms implements ModInitializer {
 		RegistryEntry<Enchantment> protection = getEnchantment(world, Enchantments.PROTECTION);
 		RegistryEntry<Enchantment> mending = getEnchantment(world, Enchantments.MENDING);
 
-		// سيف نذرايت مطور
 		ItemStack sword = new ItemStack(Items.NETHERITE_SWORD);
 		sword.set(DataComponentTypes.CUSTOM_NAME, Text.literal("قاهر الكوابيس الأسطوري").formatted(Formatting.GOLD, Formatting.BOLD));
 		if (sharpness != null) sword.addEnchantment(sharpness, 5);
 		if (unbreaking != null) sword.addEnchantment(unbreaking, 3);
 		if (looting != null) sword.addEnchantment(looting, 3);
 
-		// درع صدرية
 		ItemStack chest = new ItemStack(Items.NETHERITE_CHESTPLATE);
 		if (protection != null) chest.addEnchantment(protection, 4);
 		if (unbreaking != null) chest.addEnchantment(unbreaking, 3);
 
-		// خوذة
 		ItemStack helmet = new ItemStack(Items.NETHERITE_HELMET);
 		if (protection != null) helmet.addEnchantment(protection, 4);
 		if (unbreaking != null) helmet.addEnchantment(unbreaking, 3);
 
-		// أجنحة
 		ItemStack elytra = new ItemStack(Items.ELYTRA);
 		if (unbreaking != null) elytra.addEnchantment(unbreaking, 3);
 		if (mending != null) elytra.addEnchantment(mending, 1);
