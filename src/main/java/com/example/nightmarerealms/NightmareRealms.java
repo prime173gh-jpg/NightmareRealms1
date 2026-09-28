@@ -35,6 +35,8 @@ import net.minecraft.util.Formatting;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 
+import java.util.Random;
+
 public class NightmareRealms implements ModInitializer {
 
 	public static final String MOD_ID = "nightmarerealms";
@@ -44,6 +46,7 @@ public class NightmareRealms implements ModInitializer {
 	private static int tickCounter = 0;
 	private static int cooldownTimer = 0;
 	private static BlockPos arenaCenter;
+	private static final Random random = new Random();
 
 	private static EndermanEntity phase1Boss;
 	private static WitherSkeletonEntity phase2Boss;
@@ -64,7 +67,7 @@ public class NightmareRealms implements ModInitializer {
 				cooldownTimer--;
 				if (cooldownTimer % 20 == 0) {
 					int secondsLeft = cooldownTimer / 20;
-					bossBar.setName(Text.literal("استعد للمرحلة القادمة خلال: " + secondsLeft + " ثوانٍ").formatted(Formatting.YELLOW, Formatting.BOLD));
+					bossBar.setName(Text.literal("Prepare for next phase in: " + secondsLeft + "s").formatted(Formatting.YELLOW, Formatting.BOLD));
 				}
 				if (cooldownTimer == 0) {
 					if (currentPhase == 1) startPhase2Actual();
@@ -104,7 +107,7 @@ public class NightmareRealms implements ModInitializer {
 		}
 
 		startBossFight(source.getWorld(), player.getBlockPos(), player);
-		source.sendFeedback(() -> Text.literal("حقبة الكوابيس قد بدأت! استعد للقتال الحاسم!").formatted(Formatting.DARK_RED, Formatting.BOLD), true);
+		source.sendFeedback(() -> Text.literal("The Nightmare Realm has begun! Prepare yourself!").formatted(Formatting.DARK_RED, Formatting.BOLD), true);
 		return 1;
 	}
 
@@ -116,7 +119,8 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setColor(BossBar.Color.PURPLE);
 		bossBar.setVisible(true);
 
-		buildEnclosedArena(world, pos, Blocks.CRYING_OBSIDIAN, Blocks.TINTED_GLASS, 7, 6);
+		// Arena built with Bedrock to prevent breaking
+		buildEnclosedArena(world, pos, Blocks.BEDROCK, Blocks.BEDROCK, 7, 5);
 
 		phase1Boss = new EndermanEntity(EntityType.ENDERMAN, world);
 		phase1Boss.refreshPositionAndAngles(pos.getX() + 0.5, pos.getY() + 1, pos.getZ() + 0.5, 0, 0);
@@ -152,13 +156,13 @@ public class NightmareRealms implements ModInitializer {
 			ServerWorld world = (ServerWorld) phase1Boss.getEntityWorld();
 			player.damage(world, world.getDamageSources().magic(), 12.0f);
 			player.addStatusEffect(new StatusEffectInstance(StatusEffects.BLINDNESS, 60, 0));
-			player.sendMessage(Text.literal("اصابتك ضربة الانفجار الظلي للملك!").formatted(Formatting.DARK_PURPLE), true);
+			player.sendMessage(Text.literal("You were struck by Shadow Blast!").formatted(Formatting.DARK_PURPLE), true);
 		}
 	}
 
 	private static void startCooldown(int completedPhase) {
 		currentPhase = completedPhase;
-		cooldownTimer = 200; // 10 ثواني
+		cooldownTimer = 200; // 10 seconds
 		bossBar.setPercent(1.0f);
 	}
 
@@ -169,7 +173,7 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setName(Text.literal("Dread Knight - Phase II").formatted(Formatting.DARK_RED, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.RED);
 
-		buildEnclosedArena(world, arenaCenter, Blocks.NETHER_BRICKS, Blocks.RED_STAINED_GLASS, 7, 6);
+		buildEnclosedArena(world, arenaCenter, Blocks.BEDROCK, Blocks.BEDROCK, 7, 5);
 
 		phase2Boss = new WitherSkeletonEntity(EntityType.WITHER_SKELETON, world);
 		phase2Boss.refreshPositionAndAngles(arenaCenter.getX() + 0.5, arenaCenter.getY() + 1, arenaCenter.getZ() + 0.5, 0, 0);
@@ -223,13 +227,12 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setName(Text.literal("Nightmare Wither - Final Phase").formatted(Formatting.DARK_GRAY, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.WHITE);
 
-		// حلبة نذرية متينة للمرحلة الأخيرة
-		buildEnclosedArena(world, arenaCenter, Blocks.BEDROCK, Blocks.OBSIDIAN, 7, 7);
+		// Bedrock Arena with height 5 to prevent flying away
+		buildEnclosedArena(world, arenaCenter, Blocks.BEDROCK, Blocks.BEDROCK, 7, 5);
 
 		phase3Boss = new WitherEntity(EntityType.WITHER, world);
-		phase3Boss.refreshPositionAndAngles(arenaCenter.getX() + 0.5, arenaCenter.getY() + 2, arenaCenter.getZ() + 0.5, 0, 0);
+		phase3Boss.refreshPositionAndAngles(arenaCenter.getX() + 0.5, arenaCenter.getY() + 1.5, arenaCenter.getZ() + 0.5, 0, 0);
 
-		// دم اقل (350 HP)
 		phase3Boss.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(350.0);
 		phase3Boss.setHealth(350.0f);
 		phase3Boss.setCustomName(Text.literal("Nightmare Wither").formatted(Formatting.DARK_GRAY, Formatting.BOLD));
@@ -261,35 +264,35 @@ public class NightmareRealms implements ModInitializer {
 		if (!bossBar.getPlayers().isEmpty()) {
 			ServerPlayerEntity player = bossBar.getPlayers().iterator().next();
 
-			// الضربة الأولى: ضربة الموت الأسود (كل 10 ثوانٍ / 200 Ticks)
+			// Attack 1: Dark Death (every 10s)
 			if (tickCounter % 200 == 0) {
 				player.damage(world, world.getDamageSources().wither(), 10.0f);
 				player.addStatusEffect(new StatusEffectInstance(StatusEffects.WITHER, 100, 1));
-				player.sendMessage(Text.literal("اصابتك ضربة الموت الأسود!").formatted(Formatting.DARK_GRAY, Formatting.BOLD), true);
+				player.sendMessage(Text.literal("Dark Death Strike hit you!").formatted(Formatting.DARK_GRAY, Formatting.BOLD), true);
 			}
 
-			// الضربة الثانية: صاعقة الكوابيس (كل 18 ثانية / 360 Ticks)
+			// Attack 2: Nightmare Bolt (every 18s)
 			if (tickCounter % 360 == 0) {
 				LightningEntity lightning = new LightningEntity(EntityType.LIGHTNING_BOLT, world);
 				lightning.refreshPositionAfterTeleport(player.getX(), player.getY(), player.getZ());
 				world.spawnEntity(lightning);
-				player.sendMessage(Text.literal("ضربتك صاعقة الكوابيس!").formatted(Formatting.GOLD, Formatting.BOLD), true);
+				player.sendMessage(Text.literal("Nightmare Lightning struck you!").formatted(Formatting.GOLD, Formatting.BOLD), true);
 			}
 
-			// الضربة الثالثة: عمى الظلام المباشر (كل 25 ثانية / 500 Ticks)
+			// Attack 3: Sudden Blindness (every 25s)
 			if (tickCounter % 500 == 0) {
 				player.damage(world, world.getDamageSources().magic(), 12.0f);
 				player.addStatusEffect(new StatusEffectInstance(StatusEffects.BLINDNESS, 60, 0));
-				player.sendMessage(Text.literal("انتابك عمى الظلام المباشر!").formatted(Formatting.DARK_PURPLE, Formatting.BOLD), true);
+				player.sendMessage(Text.literal("Blinded by Darkness!").formatted(Formatting.DARK_PURPLE, Formatting.BOLD), true);
 			}
 		}
 
-		// علاج الـ Wither كل 15 ثانية
+		// Heal boss every 15s
 		if (tickCounter % 300 == 0) {
 			healBoss(phase3Boss, 350.0, 0.04);
 		}
 
-		// استدعاء مينيونز Wither Skeletons كل 20 ثانية
+		// Spawn minions every 20s
 		if (tickCounter % 400 == 0) {
 			for (int i = 0; i < 2; i++) {
 				WitherSkeletonEntity minion = new WitherSkeletonEntity(EntityType.WITHER_SKELETON, world);
@@ -329,26 +332,30 @@ public class NightmareRealms implements ModInitializer {
 		return world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT).getOptional(key).orElse(null);
 	}
 
+	// Randomized Loot Phase 1
 	private static void dropPhase1Loot(ServerWorld world, BlockPos pos) {
-		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.GOLDEN_APPLE, 6)));
-		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.ENDER_PEARL, 8)));
-		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.COOKED_BEEF, 16)));
+		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.GOLDEN_APPLE, 4 + random.nextInt(5))));
+		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.ENDER_PEARL, 4 + random.nextInt(9))));
+		
+		net.minecraft.item.Item food = random.nextBoolean() ? Items.COOKED_BEEF : Items.GOLDEN_CARROT;
+		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(food, 16)));
 	}
 
+	// Randomized Loot Phase 2
 	private static void dropPhase2Loot(ServerWorld world, BlockPos pos) {
-		ItemStack enchantedBow = new ItemStack(Items.BOW);
-
+		ItemStack weapon = random.nextBoolean() ? new ItemStack(Items.BOW) : new ItemStack(Items.CROSSBOW);
 		RegistryEntry<Enchantment> power = getEnchantment(world, Enchantments.POWER);
 		RegistryEntry<Enchantment> unbreaking = getEnchantment(world, Enchantments.UNBREAKING);
 
-		if (power != null) enchantedBow.addEnchantment(power, 4);
-		if (unbreaking != null) enchantedBow.addEnchantment(unbreaking, 3);
+		if (power != null) weapon.addEnchantment(power, 3 + random.nextInt(2));
+		if (unbreaking != null) weapon.addEnchantment(unbreaking, 3);
 
-		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 3)));
-		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), enchantedBow));
-		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.ARROW, 64)));
+		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), weapon));
+		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 1 + random.nextInt(3))));
+		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.ARROW, 32 + random.nextInt(33))));
 	}
 
+	// Fully Randomized Loot Final Phase
 	private static void dropFinalLoot(ServerWorld world, BlockPos pos) {
 		RegistryEntry<Enchantment> sharpness = getEnchantment(world, Enchantments.SHARPNESS);
 		RegistryEntry<Enchantment> unbreaking = getEnchantment(world, Enchantments.UNBREAKING);
@@ -356,30 +363,40 @@ public class NightmareRealms implements ModInitializer {
 		RegistryEntry<Enchantment> protection = getEnchantment(world, Enchantments.PROTECTION);
 		RegistryEntry<Enchantment> mending = getEnchantment(world, Enchantments.MENDING);
 
-		ItemStack sword = new ItemStack(Items.NETHERITE_SWORD);
-		sword.set(DataComponentTypes.CUSTOM_NAME, Text.literal("قاهر الكوابيس الأسطوري").formatted(Formatting.GOLD, Formatting.BOLD));
-		if (sharpness != null) sword.addEnchantment(sharpness, 5);
-		if (unbreaking != null) sword.addEnchantment(unbreaking, 3);
-		if (looting != null) sword.addEnchantment(looting, 3);
+		// 1. Random Weapon (Sword or Axe)
+		ItemStack mainWeapon;
+		if (random.nextBoolean()) {
+			mainWeapon = new ItemStack(Items.NETHERITE_SWORD);
+			mainWeapon.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Nightmare Slayer").formatted(Formatting.GOLD, Formatting.BOLD));
+			if (sharpness != null) mainWeapon.addEnchantment(sharpness, 5);
+		} else {
+			mainWeapon = new ItemStack(Items.NETHERITE_AXE);
+			mainWeapon.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Sovereign Executioner").formatted(Formatting.RED, Formatting.BOLD));
+			if (sharpness != null) mainWeapon.addEnchantment(sharpness, 5);
+		}
+		if (unbreaking != null) mainWeapon.addEnchantment(unbreaking, 3);
+		if (looting != null) mainWeapon.addEnchantment(looting, 3);
+		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), mainWeapon));
 
-		ItemStack chest = new ItemStack(Items.NETHERITE_CHESTPLATE);
-		if (protection != null) chest.addEnchantment(protection, 4);
-		if (unbreaking != null) chest.addEnchantment(unbreaking, 3);
+		// 2. Random Armor Piece (Chestplate, Helmet, Leggings, OR Elytra)
+		ItemStack armorPiece;
+		int armorType = random.nextInt(4);
+		switch (armorType) {
+			case 0 -> armorPiece = new ItemStack(Items.NETHERITE_CHESTPLATE);
+			case 1 -> armorPiece = new ItemStack(Items.NETHERITE_HELMET);
+			case 2 -> armorPiece = new ItemStack(Items.NETHERITE_LEGGINGS);
+			default -> armorPiece = new ItemStack(Items.ELYTRA);
+		}
+		if (protection != null && armorType != 3) armorPiece.addEnchantment(protection, 4);
+		if (unbreaking != null) armorPiece.addEnchantment(unbreaking, 3);
+		if (mending != null) armorPiece.addEnchantment(mending, 1);
+		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), armorPiece));
 
-		ItemStack helmet = new ItemStack(Items.NETHERITE_HELMET);
-		if (protection != null) helmet.addEnchantment(protection, 4);
-		if (unbreaking != null) helmet.addEnchantment(unbreaking, 3);
-
-		ItemStack elytra = new ItemStack(Items.ELYTRA);
-		if (unbreaking != null) elytra.addEnchantment(unbreaking, 3);
-		if (mending != null) elytra.addEnchantment(mending, 1);
-
-		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), sword));
-		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), chest));
-		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), helmet));
-		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), elytra));
-		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.TOTEM_OF_UNDYING, 4)));
-		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.NETHERITE_INGOT, 8)));
-		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.DIAMOND_BLOCK, 4)));
+		// 3. Random Consumables & Valuables
+		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.TOTEM_OF_UNDYING, 2 + random.nextInt(3))));
+		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.NETHERITE_INGOT, 4 + random.nextInt(9))));
+		
+		net.minecraft.item.Item rareBlock = random.nextBoolean() ? Items.DIAMOND_BLOCK : Items.NETHERITE_BLOCK;
+		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(rareBlock, 2 + random.nextInt(4))));
 	}
 }
