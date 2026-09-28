@@ -5,6 +5,8 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.block.Blocks;
 import net.minecraft.component.DataComponentTypes;
+import net.minecraft.enchantment.EnchantmentHelper;
+import net.minecraft.enchantment.Enchantments;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.ItemEntity;
@@ -20,6 +22,7 @@ import net.minecraft.entity.mob.SkeletonEntity;
 import net.minecraft.entity.projectile.FireballEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
+import net.minecraft.registry.RegistryKeys;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -231,10 +234,17 @@ public class NightmareRealms implements ModInitializer {
 
 		phase3Boss.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(600.0);
 		phase3Boss.setHealth(600.0f);
-		// تقليل دمج الضربة العادية عشان ما يقتلش من ضربة واحدة
 		phase3Boss.getAttributeInstance(EntityAttributes.ATTACK_DAMAGE).setBaseValue(12.0);
 		phase3Boss.setCustomName(Text.literal("Nightmare Warden").formatted(Formatting.DARK_AQUA, Formatting.BOLD));
 		phase3Boss.setCustomNameVisible(true);
+
+		// حل مشكلة اختفاء الواردن والـ Digging:
+		phase3Boss.setPersistent(); // يمنع اختفاءه تلقائياً
+		if (!bossBar.getPlayers().isEmpty()) {
+			ServerPlayerEntity targetPlayer = bossBar.getPlayers().iterator().next();
+			phase3Boss.setTarget(targetPlayer);
+			phase3Boss.increaseAngerAt(targetPlayer, 150, true); // يخليه في حالة غضب قصوى فوراً
+		}
 
 		world.spawnEntity(phase3Boss);
 	}
@@ -251,6 +261,12 @@ public class NightmareRealms implements ModInitializer {
 		}
 		bossBar.setPercent(phase3Boss.getHealth() / phase3Boss.getMaxHealth());
 
+		// إبقاء الواردن غاضباً ومستهدفاً للاعب لتفادي الاختفاء
+		if (tickCounter % 20 == 0 && !bossBar.getPlayers().isEmpty()) {
+			ServerPlayerEntity targetPlayer = bossBar.getPlayers().iterator().next();
+			phase3Boss.increaseAngerAt(targetPlayer, 50, false);
+		}
+
 		// 1. علاج كل 15 ثانية (4% من الصحة)
 		if (tickCounter % 300 == 0) {
 			healBoss(phase3Boss, 600.0, 0.04);
@@ -259,13 +275,13 @@ public class NightmareRealms implements ModInitializer {
 		// 2. إطلاق Sonic Boom رئيسية كل 8 ثواني
 		if (tickCounter % 160 == 0 && phase3Boss.getTarget() instanceof ServerPlayerEntity player) {
 			ServerWorld world = (ServerWorld) phase3Boss.getEntityWorld();
-			if (phase3Boss.squaredDistanceTo(player) < 225.0) { // مدى Sonic Beam
+			if (phase3Boss.squaredDistanceTo(player) < 225.0) {
 				player.damage(world, world.getDamageSources().sonicBoom(phase3Boss), 15.0f);
-				world.sendEntityStatus(phase3Boss, (byte) 62); // Sonic boom animation
+				world.sendEntityStatus(phase3Boss, (byte) 62);
 			}
 		}
 
-		// 3. استدعاء صغار Wardens كـ Minions كل 20 ثانية (يطلقون Sonic Beam بدمج أقل 70% ومدى أقل 65%)
+		// 3. استدعاء صغار Wardens كـ Minions
 		if (tickCounter % 400 == 0) {
 			ServerWorld world = (ServerWorld) phase3Boss.getEntityWorld();
 			WardenEntity minionWarden = new WardenEntity(EntityType.WARDEN, world);
@@ -274,20 +290,24 @@ public class NightmareRealms implements ModInitializer {
 			minionWarden.setHealth(100.0f);
 			minionWarden.getAttributeInstance(EntityAttributes.ATTACK_DAMAGE).setBaseValue(4.0);
 			minionWarden.setCustomName(Text.literal("Warden Minion").formatted(Formatting.GRAY));
+			minionWarden.setPersistent();
+
+			if (phase3Boss.getTarget() != null) {
+				minionWarden.setTarget(phase3Boss.getTarget());
+				minionWarden.increaseAngerAt(phase3Boss.getTarget(), 100, true);
+			}
 
 			world.spawnEntity(minionWarden);
 
-			// إطلاق Sonic Beam مصغر من المينيون فور استدعائه
 			if (phase3Boss.getTarget() instanceof ServerPlayerEntity player) {
 				double dist = minionWarden.squaredDistanceTo(player);
-				if (dist < 80.0) { // مدى أقل 65% (حوالي 8-9 بلوكات)
-					player.damage(world, world.getDamageSources().sonicBoom(minionWarden), 4.5f); // دمج أقل 70%
+				if (dist < 80.0) {
+					player.damage(world, world.getDamageSources().sonicBoom(minionWarden), 4.5f);
 				}
 			}
 		}
 	}
 
-	// ميثود علاج البوس بنفس النسبة
 	private static void healBoss(net.minecraft.entity.mob.MobEntity boss, double maxHealth, double percentage) {
 		float healAmount = (float) (maxHealth * percentage);
 		boss.heal(healAmount);
@@ -320,22 +340,42 @@ public class NightmareRealms implements ModInitializer {
 	}
 
 	private static void dropPhase2Loot(ServerWorld world, BlockPos pos) {
-		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 2)));
-		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.BOW, 1)));
+		ItemStack enchantedBow = new ItemStack(Items.BOW);
+		enchantedBow.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.POWER).get(), 4);
+		enchantedBow.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.UNBREAKING).get(), 3);
+
+		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 3)));
+		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), enchantedBow));
 		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.ARROW, 64)));
 	}
 
 	private static void dropFinalLoot(ServerWorld world, BlockPos pos) {
+		// سيف نذرايت مطور بأقوى السحريات
 		ItemStack sword = new ItemStack(Items.NETHERITE_SWORD);
 		sword.set(DataComponentTypes.CUSTOM_NAME, Text.literal("قاهر الكوابيس الأسطوري").formatted(Formatting.GOLD, Formatting.BOLD));
+		sword.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.SHARPNESS).get(), 5);
+		sword.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.UNBREAKING).get(), 3);
+		sword.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.LOOTING).get(), 3);
 
+		// درع صدرية نذرايت مطورة
 		ItemStack chest = new ItemStack(Items.NETHERITE_CHESTPLATE);
+		chest.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.PROTECTION).get(), 4);
+		chest.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.UNBREAKING).get(), 3);
+
+		// خوذة نذرايت مطورة
 		ItemStack helmet = new ItemStack(Items.NETHERITE_HELMET);
+		helmet.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.PROTECTION).get(), 4);
+		helmet.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.UNBREAKING).get(), 3);
+
+		// أجنحة مطورة
+		ItemStack elytra = new ItemStack(Items.ELYTRA);
+		elytra.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.UNBREAKING).get(), 3);
+		elytra.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.MENDING).get(), 1);
 
 		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), sword));
 		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), chest));
 		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), helmet));
-		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.ELYTRA, 1)));
+		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), elytra));
 		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.TOTEM_OF_UNDYING, 4)));
 		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.NETHERITE_INGOT, 8)));
 		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.DIAMOND_BLOCK, 4)));
