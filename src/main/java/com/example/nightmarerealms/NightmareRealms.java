@@ -14,7 +14,7 @@ import net.minecraft.entity.boss.ServerBossBar;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.mob.EndermanEntity;
-import net.minecraft.entity.mob.PhantomEntity;
+import net.minecraft.entity.mob.WardenEntity;
 import net.minecraft.entity.mob.WitherSkeletonEntity;
 import net.minecraft.entity.mob.SkeletonEntity;
 import net.minecraft.entity.projectile.FireballEntity;
@@ -41,7 +41,7 @@ public class NightmareRealms implements ModInitializer {
 
 	private static EndermanEntity phase1Boss;
 	private static WitherSkeletonEntity phase2Boss;
-	private static PhantomEntity phase3Boss;
+	private static WardenEntity phase3Boss;
 
 	@Override
 	public void onInitialize() {
@@ -99,7 +99,7 @@ public class NightmareRealms implements ModInitializer {
 		}
 
 		startBossFight(source.getWorld(), player.getBlockPos(), player);
-		source.sendFeedback(() -> Text.literal("حقبة الكوابيس قد بدأت! حلبة المغلقة استُدعيت!").formatted(Formatting.DARK_RED, Formatting.BOLD), true);
+		source.sendFeedback(() -> Text.literal("حقبة الكوابيس قد بدأت! استعد لمواجهة الواردن والحلبة المغلقة!").formatted(Formatting.DARK_RED, Formatting.BOLD), true);
 		return 1;
 	}
 
@@ -111,7 +111,6 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setColor(BossBar.Color.PURPLE);
 		bossBar.setVisible(true);
 
-		// حلبة مغلقة 15x15 مع سقف لحماية الفانتوم ومنع الهرب
 		buildEnclosedArena(world, pos, Blocks.CRYING_OBSIDIAN, Blocks.TINTED_GLASS);
 
 		phase1Boss = new EndermanEntity(EntityType.ENDERMAN, world);
@@ -134,17 +133,30 @@ public class NightmareRealms implements ModInitializer {
 		}
 		bossBar.setPercent(phase1Boss.getHealth() / phase1Boss.getMaxHealth());
 
-		// إعطاء تأثير الطيران فقط لو الإندرمان يهاجم اللاعب المباشر ويكون قريب منه جداً
-		if (phase1Boss.getTarget() instanceof ServerPlayerEntity player) {
-			if (phase1Boss.squaredDistanceTo(player) < 9.0) { // مسافة ضرب قريبة جداً
-				player.addStatusEffect(new StatusEffectInstance(StatusEffects.LEVITATION, 30, 0));
-			}
+		// 1. علاجات كل 15 ثانية (4% من الصحة)
+		if (tickCounter % 300 == 0) {
+			healBoss(phase1Boss, 300.0, 0.04);
+		}
+
+		// 2. زيادة سرعة الانتقال التلغرافي (Teleport Speed)
+		if (tickCounter % 40 == 0 && phase1Boss.getTarget() != null) {
+			ServerWorld world = (ServerWorld) phase1Boss.getEntityWorld();
+			BlockPos targetPos = phase1Boss.getTarget().getBlockPos().add(world.random.nextInt(5) - 2, 0, world.random.nextInt(5) - 2);
+			phase1Boss.teleport(targetPos.getX(), targetPos.getY(), targetPos.getZ(), true);
+		}
+
+		// 3. ضربة مؤكدة كل 13 ثانية (260 ticks) - Shadow Burst
+		if (tickCounter % 260 == 0 && phase1Boss.getTarget() instanceof ServerPlayerEntity player) {
+			ServerWorld world = (ServerWorld) phase1Boss.getEntityWorld();
+			player.damage(world, world.getDamageSources().magic(), 12.0f); // 6 قلوب ضرر مؤكد
+			player.addStatusEffect(new StatusEffectInstance(StatusEffects.BLINDNESS, 60, 0));
+			player.sendMessage(Text.literal("اصابتك ضربة الانفجار الظلي للملك!").formatted(Formatting.DARK_PURPLE), true);
 		}
 	}
 
 	private static void startCooldown(int completedPhase) {
 		currentPhase = completedPhase;
-		cooldownTimer = 200; // 10 ثواني (200 ticks)
+		cooldownTimer = 200; // 10 ثواني
 		bossBar.setPercent(1.0f);
 	}
 
@@ -180,7 +192,12 @@ public class NightmareRealms implements ModInitializer {
 		}
 		bossBar.setPercent(phase2Boss.getHealth() / phase2Boss.getMaxHealth());
 
-		// 1. إطلاق فاير بول كل 4 ثواني
+		// 1. علاج كل 15 ثانية (4% من الصحة)
+		if (tickCounter % 300 == 0) {
+			healBoss(phase2Boss, 450.0, 0.04);
+		}
+
+		// 2. إطلاق فاير بول
 		if (tickCounter % 80 == 0 && phase2Boss.getTarget() != null) {
 			ServerWorld world = (ServerWorld) phase2Boss.getEntityWorld();
 			Vec3d lookVec = phase2Boss.getRotationVec(1.0F);
@@ -189,7 +206,7 @@ public class NightmareRealms implements ModInitializer {
 			world.spawnEntity(fireball);
 		}
 
-		// 2. استدعاء جنود (Minions) يساعدوه كل 10 ثواني
+		// 3. استدعاء جنود
 		if (tickCounter % 200 == 0) {
 			ServerWorld world = (ServerWorld) phase2Boss.getEntityWorld();
 			for (int i = 0; i < 2; i++) {
@@ -204,16 +221,19 @@ public class NightmareRealms implements ModInitializer {
 		currentPhase = 3;
 		ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
 
-		bossBar.setName(Text.literal("Apex Phantom - Final Phase").formatted(Formatting.BLUE, Formatting.BOLD));
+		bossBar.setName(Text.literal("Nightmare Warden - Final Phase").formatted(Formatting.DARK_AQUA, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.BLUE);
 
-		phase3Boss = new PhantomEntity(EntityType.PHANTOM, world);
-		phase3Boss.refreshPositionAndAngles(arenaCenter.up(4), 0, 0); // ارتفاع قريب تحت السقف
+		buildEnclosedArena(world, arenaCenter, Blocks.REINFORCED_DEEPSLATE, Blocks.BLACK_STAINED_GLASS);
 
-		phase3Boss.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(500.0);
-		phase3Boss.setHealth(500.0f);
-		phase3Boss.getAttributeInstance(EntityAttributes.ATTACK_DAMAGE).setBaseValue(20.0);
-		phase3Boss.setCustomName(Text.literal("Apex Phantom").formatted(Formatting.BLUE, Formatting.BOLD));
+		phase3Boss = new WardenEntity(EntityType.WARDEN, world);
+		phase3Boss.refreshPositionAndAngles(arenaCenter.up(1), 0, 0);
+
+		phase3Boss.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(600.0);
+		phase3Boss.setHealth(600.0f);
+		// تقليل دمج الضربة العادية عشان ما يقتلش من ضربة واحدة
+		phase3Boss.getAttributeInstance(EntityAttributes.ATTACK_DAMAGE).setBaseValue(12.0);
+		phase3Boss.setCustomName(Text.literal("Nightmare Warden").formatted(Formatting.DARK_AQUA, Formatting.BOLD));
 		phase3Boss.setCustomNameVisible(true);
 
 		world.spawnEntity(phase3Boss);
@@ -231,32 +251,61 @@ public class NightmareRealms implements ModInitializer {
 		}
 		bossBar.setPercent(phase3Boss.getHealth() / phase3Boss.getMaxHealth());
 
-		// ضربات انفجارية سريعة
-		if (tickCounter % 100 == 0 && phase3Boss.getTarget() instanceof ServerPlayerEntity player) {
+		// 1. علاج كل 15 ثانية (4% من الصحة)
+		if (tickCounter % 300 == 0) {
+			healBoss(phase3Boss, 600.0, 0.04);
+		}
+
+		// 2. إطلاق Sonic Boom رئيسية كل 8 ثواني
+		if (tickCounter % 160 == 0 && phase3Boss.getTarget() instanceof ServerPlayerEntity player) {
 			ServerWorld world = (ServerWorld) phase3Boss.getEntityWorld();
-			world.createExplosion(phase3Boss, player.getX(), player.getY(), player.getZ(), 1.5f, ServerWorld.ExplosionSourceType.NONE);
+			if (phase3Boss.squaredDistanceTo(player) < 225.0) { // مدى Sonic Beam
+				player.damage(world, world.getDamageSources().sonicBoom(phase3Boss), 15.0f);
+				world.sendEntityStatus(phase3Boss, (byte) 62); // Sonic boom animation
+			}
+		}
+
+		// 3. استدعاء صغار Wardens كـ Minions كل 20 ثانية (يطلقون Sonic Beam بدمج أقل 70% ومدى أقل 65%)
+		if (tickCounter % 400 == 0) {
+			ServerWorld world = (ServerWorld) phase3Boss.getEntityWorld();
+			WardenEntity minionWarden = new WardenEntity(EntityType.WARDEN, world);
+			minionWarden.refreshPositionAndAngles(phase3Boss.getBlockPos().add(2, 0, 2), 0, 0);
+			minionWarden.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(100.0);
+			minionWarden.setHealth(100.0f);
+			minionWarden.getAttributeInstance(EntityAttributes.ATTACK_DAMAGE).setBaseValue(4.0);
+			minionWarden.setCustomName(Text.literal("Warden Minion").formatted(Formatting.GRAY));
+
+			world.spawnEntity(minionWarden);
+
+			// إطلاق Sonic Beam مصغر من المينيون فور استدعائه
+			if (phase3Boss.getTarget() instanceof ServerPlayerEntity player) {
+				double dist = minionWarden.squaredDistanceTo(player);
+				if (dist < 80.0) { // مدى أقل 65% (حوالي 8-9 بلوكات)
+					player.damage(world, world.getDamageSources().sonicBoom(minionWarden), 4.5f); // دمج أقل 70%
+				}
+			}
 		}
 	}
 
-	// بناء حلبة مغلقة 15x15 بارتفاع 8 بلوكات مع سقف مظلل
+	// ميثود علاج البوس بنفس النسبة
+	private static void healBoss(net.minecraft.entity.mob.MobEntity boss, double maxHealth, double percentage) {
+		float healAmount = (float) (maxHealth * percentage);
+		boss.heal(healAmount);
+	}
+
 	private static void buildEnclosedArena(ServerWorld world, BlockPos center, net.minecraft.block.Block floorBlock, net.minecraft.block.Block wallBlock) {
-		int radius = 7; // 15x15
+		int radius = 7;
 		int height = 7;
 
 		for (int x = -radius; x <= radius; x++) {
 			for (int z = -radius; z <= radius; z++) {
-				// الأرضية
 				world.setBlockState(center.add(x, -1, z), floorBlock.getDefaultState());
-				// السقف (محمي ومظلل)
 				world.setBlockState(center.add(x, height, z), wallBlock.getDefaultState());
 
-				// تفريغ الداخل
 				for (int y = 0; y < height; y++) {
 					if (Math.abs(x) == radius || Math.abs(z) == radius) {
-						// الجدران
 						world.setBlockState(center.add(x, y, z), wallBlock.getDefaultState());
 					} else {
-						// هواء بالداخل
 						world.setBlockState(center.add(x, y, z), Blocks.AIR.getDefaultState());
 					}
 				}
@@ -264,22 +313,18 @@ public class NightmareRealms implements ModInitializer {
 		}
 	}
 
-	// لوت المرحلة الأولى المساعد (تضبيط أكل وهيلث)
 	private static void dropPhase1Loot(ServerWorld world, BlockPos pos) {
 		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.GOLDEN_APPLE, 6)));
 		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.ENDER_PEARL, 8)));
 		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.COOKED_BEEF, 16)));
 	}
 
-	// لوت المرحلة الثانية المساعد (استعداد للفانتوم النهائي)
 	private static void dropPhase2Loot(ServerWorld world, BlockPos pos) {
 		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 2)));
 		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.BOW, 1)));
 		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.ARROW, 64)));
-		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.POTION, 2))); // Healing
 	}
 
-	// اللوت النهائي الأسطوري القوي جداً
 	private static void dropFinalLoot(ServerWorld world, BlockPos pos) {
 		ItemStack sword = new ItemStack(Items.NETHERITE_SWORD);
 		sword.set(DataComponentTypes.CUSTOM_NAME, Text.literal("قاهر الكوابيس الأسطوري").formatted(Formatting.GOLD, Formatting.BOLD));
