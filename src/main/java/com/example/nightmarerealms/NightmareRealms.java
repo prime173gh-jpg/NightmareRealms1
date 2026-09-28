@@ -55,6 +55,10 @@ public class NightmareRealms implements ModInitializer {
 	private static WitherSkeletonEntity phase2Boss;
 	private static WitherEntity phase3Boss;
 
+	// نصف قطر 15 يجعل الحلبة بمساحة 30x30
+	private static final int ARENA_RADIUS = 15;
+	private static final int ARENA_HEIGHT = 7;
+
 	@Override
 	public void onInitialize() {
 		bossBar = new ServerBossBar(
@@ -122,7 +126,7 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setColor(BossBar.Color.PURPLE);
 		bossBar.setVisible(true);
 
-		buildEnclosedArena(world, pos, Blocks.BEDROCK, Blocks.BEDROCK, 7, 5);
+		buildEnclosedArena(world, pos, ARENA_RADIUS, ARENA_HEIGHT);
 
 		phase1Boss = new EndermanEntity(EntityType.ENDERMAN, world);
 		phase1Boss.refreshPositionAndAngles(pos.getX() + 0.5, pos.getY() + 1, pos.getZ() + 0.5, 0, 0);
@@ -144,13 +148,14 @@ public class NightmareRealms implements ModInitializer {
 		}
 		bossBar.setPercent(phase1Boss.getHealth() / phase1Boss.getMaxHealth());
 
-		if (tickCounter % 300 == 0) {
-			healBoss(phase1Boss, 300.0, 0.04);
+		// هيل 15% كل 13 ثانية (260 تيك)
+		if (tickCounter % 260 == 0) {
+			healBoss(phase1Boss, 300.0, 0.15);
 		}
 
 		if (tickCounter % 40 == 0 && phase1Boss.getTarget() != null) {
 			ServerWorld world = (ServerWorld) phase1Boss.getEntityWorld();
-			BlockPos targetPos = phase1Boss.getTarget().getBlockPos().add(world.random.nextInt(5) - 2, 0, world.random.nextInt(5) - 2);
+			BlockPos targetPos = phase1Boss.getTarget().getBlockPos().add(world.random.nextInt(7) - 3, 0, world.random.nextInt(7) - 3);
 			phase1Boss.teleport(targetPos.getX(), targetPos.getY(), targetPos.getZ(), true);
 		}
 
@@ -175,7 +180,7 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setName(Text.literal("Dread Knight - Phase II").formatted(Formatting.DARK_RED, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.RED);
 
-		buildEnclosedArena(world, arenaCenter, Blocks.BEDROCK, Blocks.BEDROCK, 7, 5);
+		buildEnclosedArena(world, arenaCenter, ARENA_RADIUS, ARENA_HEIGHT);
 
 		phase2Boss = new WitherSkeletonEntity(EntityType.WITHER_SKELETON, world);
 		phase2Boss.refreshPositionAndAngles(arenaCenter.getX() + 0.5, arenaCenter.getY() + 1, arenaCenter.getZ() + 0.5, 0, 0);
@@ -200,8 +205,9 @@ public class NightmareRealms implements ModInitializer {
 		}
 		bossBar.setPercent(phase2Boss.getHealth() / phase2Boss.getMaxHealth());
 
-		if (tickCounter % 300 == 0) {
-			healBoss(phase2Boss, 450.0, 0.04);
+		// هيل 15% كل 13 ثانية (260 تيك)
+		if (tickCounter % 260 == 0) {
+			healBoss(phase2Boss, 450.0, 0.15);
 		}
 
 		if (tickCounter % 80 == 0 && phase2Boss.getTarget() != null) {
@@ -229,7 +235,7 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setName(Text.literal("Nightmare Wither - Final Phase").formatted(Formatting.DARK_GRAY, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.WHITE);
 
-		buildEnclosedArena(world, arenaCenter, Blocks.BEDROCK, Blocks.BEDROCK, 7, 5);
+		buildEnclosedArena(world, arenaCenter, ARENA_RADIUS, ARENA_HEIGHT);
 
 		phase3Boss = new WitherEntity(EntityType.WITHER, world);
 		phase3Boss.refreshPositionAndAngles(arenaCenter.getX() + 0.5, arenaCenter.getY() + 1.5, arenaCenter.getZ() + 0.5, 0, 0);
@@ -251,9 +257,9 @@ public class NightmareRealms implements ModInitializer {
 	private static void updatePhase3() {
 		if (!phase3Boss.isAlive()) {
 			ServerWorld world = (ServerWorld) phase3Boss.getEntityWorld();
-			
+
 			dropRandomizedLoot(world, phase3Boss.getBlockPos(), 3);
-			clearArena(world, arenaCenter, 7, 5);
+			clearArena(world, arenaCenter, ARENA_RADIUS, ARENA_HEIGHT);
 
 			currentPhase = 0;
 			bossBar.setVisible(false);
@@ -288,8 +294,9 @@ public class NightmareRealms implements ModInitializer {
 			}
 		}
 
-		if (tickCounter % 300 == 0) {
-			healBoss(phase3Boss, 350.0, 0.04);
+		// هيل 15% كل 13 ثانية (260 تيك)
+		if (tickCounter % 260 == 0) {
+			healBoss(phase3Boss, 350.0, 0.15);
 		}
 
 		if (tickCounter % 400 == 0) {
@@ -310,29 +317,42 @@ public class NightmareRealms implements ModInitializer {
 		boss.heal(healAmount);
 	}
 
-	private static void buildEnclosedArena(ServerWorld world, BlockPos center, net.minecraft.block.Block floorBlock, net.minecraft.block.Block wallBlock, int radius, int height) {
+	// بناء الحلبة 30x30 وتأمين إضاءتها بـ Sea Lanterns
+	private static void buildEnclosedArena(ServerWorld world, BlockPos center, int radius, int height) {
 		for (int x = -radius; x <= radius; x++) {
 			for (int z = -radius; z <= radius; z++) {
-				world.setBlockState(center.add(x, -1, z), floorBlock.getDefaultState());
-				world.setBlockState(center.add(x, height, z), wallBlock.getDefaultState());
+				// الأرضية والسقف بيدروك
+				world.setBlockState(center.add(x, -1, z), Blocks.BEDROCK.getDefaultState());
+				world.setBlockState(center.add(x, height, z), Blocks.BEDROCK.getDefaultState());
 
 				for (int y = 0; y < height; y++) {
 					if (Math.abs(x) == radius || Math.abs(z) == radius) {
-						world.setBlockState(center.add(x, y, z), wallBlock.getDefaultState());
+						// إضاءة أركان الجدران
+						if ((Math.abs(x) == radius - 3 || Math.abs(x) == radius) && (Math.abs(z) == radius - 3 || Math.abs(z) == radius) && y == 3) {
+							world.setBlockState(center.add(x, y, z), Blocks.SEA_LANTERN.getDefaultState());
+						} else {
+							world.setBlockState(center.add(x, y, z), Blocks.BEDROCK.getDefaultState());
+						}
 					} else {
-						world.setBlockState(center.add(x, y, z), Blocks.AIR.getDefaultState());
+						// إضاءة ملفتة وموزعة في السقف
+						if (y == height - 1 && (Math.abs(x) % 6 == 0 && Math.abs(z) % 6 == 0)) {
+							world.setBlockState(center.add(x, y, z), Blocks.SEA_LANTERN.getDefaultState());
+						} else {
+							world.setBlockState(center.add(x, y, z), Blocks.AIR.getDefaultState());
+						}
 					}
 				}
 			}
 		}
 	}
 
+	// إزالة الحلبة بالكامل بعد القتال
 	private static void clearArena(ServerWorld world, BlockPos center, int radius, int height) {
 		for (int x = -radius; x <= radius; x++) {
 			for (int z = -radius; z <= radius; z++) {
 				for (int y = -1; y <= height; y++) {
 					BlockPos pos = center.add(x, y, z);
-					if (world.getBlockState(pos).isOf(Blocks.BEDROCK)) {
+					if (world.getBlockState(pos).isOf(Blocks.BEDROCK) || world.getBlockState(pos).isOf(Blocks.SEA_LANTERN)) {
 						world.setBlockState(pos, Blocks.AIR.getDefaultState());
 					}
 				}
@@ -344,10 +364,10 @@ public class NightmareRealms implements ModInitializer {
 		return world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT).getOptional(key).orElse(null);
 	}
 
-	// ==================== نظام اللوت العشوائي الشامل ====================
+	// ==================== نظام اللوت العشوائي ====================
 
 	private static void dropRandomizedLoot(ServerWorld world, BlockPos pos, int phase) {
-		int numberOfItems = 3 + random.nextInt(phase + 2); // عدد العناصر يزداد حسب المرحلة
+		int numberOfItems = 3 + random.nextInt(phase + 2);
 
 		for (int i = 0; i < numberOfItems; i++) {
 			ItemStack lootItem = generateRandomItem(world, phase);
@@ -358,7 +378,7 @@ public class NightmareRealms implements ModInitializer {
 	}
 
 	private static ItemStack generateRandomItem(ServerWorld world, int phase) {
-		int category = random.nextInt(4); // 0: أسلحة/أدوات, 1: دروع, 2: مستهلكات, 3: موارد نادرة
+		int category = random.nextInt(4);
 
 		RegistryEntry<Enchantment> sharpness = getEnchantment(world, Enchantments.SHARPNESS);
 		RegistryEntry<Enchantment> power = getEnchantment(world, Enchantments.POWER);
@@ -366,10 +386,10 @@ public class NightmareRealms implements ModInitializer {
 		RegistryEntry<Enchantment> protection = getEnchantment(world, Enchantments.PROTECTION);
 		RegistryEntry<Enchantment> mending = getEnchantment(world, Enchantments.MENDING);
 
-		boolean isNetheriteAllowed = (phase >= 2) && random.nextBoolean(); // نيثرايت أو دايموند حسب الحظ والمرحلة
+		boolean isNetheriteAllowed = (phase >= 2) && random.nextBoolean();
 
 		switch (category) {
-			case 0 -> { // أسلحة وأدوات
+			case 0 -> {
 				Item weaponItem;
 				int roll = random.nextInt(4);
 				if (roll == 0) weaponItem = isNetheriteAllowed ? Items.NETHERITE_SWORD : Items.DIAMOND_SWORD;
@@ -386,13 +406,12 @@ public class NightmareRealms implements ModInitializer {
 				if (unbreaking != null) weapon.addEnchantment(unbreaking, 1 + random.nextInt(3));
 				if (phase == 3 && mending != null && random.nextBoolean()) weapon.addEnchantment(mending, 1);
 
-				// اسم عشوائي مميز للأسلحة النادرة
 				if (phase == 3) {
 					weapon.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Nightmare Conqueror").formatted(Formatting.GOLD, Formatting.BOLD));
 				}
 				return weapon;
 			}
-			case 1 -> { // دروع
+			case 1 -> {
 				if (phase == 3 && random.nextInt(4) == 0) {
 					ItemStack elytra = new ItemStack(Items.ELYTRA);
 					if (unbreaking != null) elytra.addEnchantment(unbreaking, 3);
@@ -412,7 +431,7 @@ public class NightmareRealms implements ModInitializer {
 				if (unbreaking != null) armor.addEnchantment(unbreaking, 1 + random.nextInt(3));
 				return armor;
 			}
-			case 2 -> { // أطعمة وجرعات ومستلزمات
+			case 2 -> {
 				List<Item> consumables = new ArrayList<>();
 				consumables.add(Items.GOLDEN_APPLE);
 				consumables.add(Items.ENCHANTED_GOLDEN_APPLE);
@@ -424,7 +443,7 @@ public class NightmareRealms implements ModInitializer {
 				int amount = selectedFood == Items.ENCHANTED_GOLDEN_APPLE ? 1 + random.nextInt(2) : 4 + random.nextInt(12);
 				return new ItemStack(selectedFood, amount);
 			}
-			default -> { // موارد نادرة
+			default -> {
 				if (phase == 1) {
 					return new ItemStack(random.nextBoolean() ? Items.GOLD_INGOT : Items.DIAMOND, 4 + random.nextInt(6));
 				} else if (phase == 2) {
