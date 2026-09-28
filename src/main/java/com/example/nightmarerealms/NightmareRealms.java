@@ -17,6 +17,7 @@ import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.mob.EndermanEntity;
 import net.minecraft.entity.mob.SkeletonEntity;
+import net.minecraft.entity.mob.VexEntity;
 import net.minecraft.entity.mob.WardenEntity;
 import net.minecraft.entity.mob.WitherSkeletonEntity;
 import net.minecraft.entity.projectile.FireballEntity;
@@ -222,7 +223,7 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setName(Text.literal("Nightmare Warden - Final Phase").formatted(Formatting.DARK_AQUA, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.BLUE);
 
-		// حلبة 15x15 مستوحاة من Deep Dark Cave
+		// حلبة 15x15 Deep Dark Cave
 		buildEnclosedArena(world, arenaCenter, Blocks.SCULK, Blocks.REINFORCED_DEEPSLATE, 7, 7);
 
 		phase3Boss = new WardenEntity(EntityType.WARDEN, world);
@@ -236,15 +237,13 @@ public class NightmareRealms implements ModInitializer {
 
 		phase3Boss.setPersistent();
 
-		// نقل اللاعب فوراً لمنتصف الحلبة مع التأكد من توافقية طريقة الانتقال
 		if (!bossBar.getPlayers().isEmpty()) {
 			ServerPlayerEntity targetPlayer = bossBar.getPlayers().iterator().next();
 			targetPlayer.requestTeleport(arenaCenter.getX() + 0.5, arenaCenter.getY() + 1, arenaCenter.getZ() + 3.0);
 			targetPlayer.addStatusEffect(new StatusEffectInstance(StatusEffects.DARKNESS, 1200, 0));
 
-			// إجبار الواردن على استهداف وغضب اللاعب
 			phase3Boss.setTarget(targetPlayer);
-			phase3Boss.increaseAngerAt(targetPlayer, 350, true);
+			phase3Boss.increaseAngerAt(targetPlayer, 300, true);
 		}
 
 		world.spawnEntity(phase3Boss);
@@ -262,46 +261,35 @@ public class NightmareRealms implements ModInitializer {
 		}
 		bossBar.setPercent(phase3Boss.getHealth() / phase3Boss.getMaxHealth());
 
-		// المحافظة المستمرة على غضب الواردن
-		if (!bossBar.getPlayers().isEmpty()) {
+		// 1. تحديث هدف وغضب الواردن كل ثانية بدلاً من كل Frame لتجنب تجمد الـ AI
+		if (tickCounter % 20 == 0 && !bossBar.getPlayers().isEmpty()) {
 			ServerPlayerEntity targetPlayer = bossBar.getPlayers().iterator().next();
-			if (phase3Boss.getTarget() == null) {
+			if (phase3Boss.getTarget() == null || !phase3Boss.getTarget().equals(targetPlayer)) {
 				phase3Boss.setTarget(targetPlayer);
 			}
-			phase3Boss.increaseAngerAt(targetPlayer, 100, false);
+			phase3Boss.increaseAngerAt(targetPlayer, 50, true);
 		}
 
-		// 1. علاج كل 15 ثانية
+		// 2. علاج البوس كل 15 ثانية
 		if (tickCounter % 300 == 0) {
 			healBoss(phase3Boss, 600.0, 0.04);
 		}
 
-		// 2. هجوم الصوت المباشر (Sonic Boom Damage) كل 6 ثوانٍ
-		if (tickCounter % 120 == 0 && phase3Boss.getTarget() instanceof ServerPlayerEntity player) {
-			ServerWorld world = (ServerWorld) phase3Boss.getEntityWorld();
-			if (phase3Boss.squaredDistanceTo(player) < 225.0) {
-				player.damage(world, world.getDamageSources().sonicBoom(phase3Boss), 16.0f);
-				world.sendEntityStatus(phase3Boss, (byte) 62);
-			}
-		}
-
-		// 3. استدعاء Warden Minion غاضب
+		// 3. استدعاء أطياف كابوسية (Vex) بدلاً من Warden آخر لمنع الازدحام
 		if (tickCounter % 400 == 0) {
 			ServerWorld world = (ServerWorld) phase3Boss.getEntityWorld();
-			WardenEntity minionWarden = new WardenEntity(EntityType.WARDEN, world);
-			minionWarden.refreshPositionAndAngles(phase3Boss.getBlockPos().add(2, 0, 2), 0, 0);
-			minionWarden.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(120.0);
-			minionWarden.setHealth(120.0f);
-			minionWarden.getAttributeInstance(EntityAttributes.ATTACK_DAMAGE).setBaseValue(8.0);
-			minionWarden.setCustomName(Text.literal("Warden Minion").formatted(Formatting.GRAY));
-			minionWarden.setPersistent();
+			for (int i = 0; i < 2; i++) {
+				VexEntity minion = new VexEntity(EntityType.VEX, world);
+				minion.refreshPositionAndAngles(phase3Boss.getBlockPos().add(i == 0 ? 1 : -1, 1, i == 0 ? 1 : -1), 0, 0);
+				minion.setCustomName(Text.literal("Nightmare Phantom").formatted(Formatting.DARK_AQUA));
+				minion.setCustomNameVisible(true);
 
-			if (phase3Boss.getTarget() instanceof ServerPlayerEntity player) {
-				minionWarden.setTarget(player);
-				minionWarden.increaseAngerAt(player, 300, true);
+				if (phase3Boss.getTarget() instanceof ServerPlayerEntity player) {
+					minion.setTarget(player);
+				}
+
+				world.spawnEntity(minion);
 			}
-
-			world.spawnEntity(minionWarden);
 		}
 	}
 
