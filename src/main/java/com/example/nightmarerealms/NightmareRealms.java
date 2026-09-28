@@ -222,7 +222,7 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setName(Text.literal("Nightmare Warden - Final Phase").formatted(Formatting.DARK_AQUA, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.BLUE);
 
-		// حلبة 15x15 مستوحاة من Deep Dark Cave (15x15 = نصف القطر 7)
+		// حلبة 15x15 مستوحاة من Deep Dark Cave
 		buildEnclosedArena(world, arenaCenter, Blocks.SCULK, Blocks.REINFORCED_DEEPSLATE, 7, 7);
 
 		phase3Boss = new WardenEntity(EntityType.WARDEN, world);
@@ -236,10 +236,10 @@ public class NightmareRealms implements ModInitializer {
 
 		phase3Boss.setPersistent();
 
-		// نقل اللاعب فوراً لمنتصف الحلبة مع إعطائه تأثير Darkness
+		// نقل اللاعب فوراً لمنتصف الحلبة مع التأكد من توافقية طريقة الانتقال
 		if (!bossBar.getPlayers().isEmpty()) {
 			ServerPlayerEntity targetPlayer = bossBar.getPlayers().iterator().next();
-			targetPlayer.teleport(world, arenaCenter.getX() + 0.5, arenaCenter.getY() + 1, arenaCenter.getZ() + 3.0, targetPlayer.getYaw(), targetPlayer.getPitch());
+			targetPlayer.requestTeleport(arenaCenter.getX() + 0.5, arenaCenter.getY() + 1, arenaCenter.getZ() + 3.0);
 			targetPlayer.addStatusEffect(new StatusEffectInstance(StatusEffects.DARKNESS, 1200, 0));
 
 			// إجبار الواردن على استهداف وغضب اللاعب
@@ -281,11 +281,11 @@ public class NightmareRealms implements ModInitializer {
 			ServerWorld world = (ServerWorld) phase3Boss.getEntityWorld();
 			if (phase3Boss.squaredDistanceTo(player) < 225.0) {
 				player.damage(world, world.getDamageSources().sonicBoom(phase3Boss), 16.0f);
-				world.sendEntityStatus(phase3Boss, (byte) 62); // تشغيل أنيميشن الصوت
+				world.sendEntityStatus(phase3Boss, (byte) 62);
 			}
 		}
 
-		// 3. استدعاء Warden Minion غاضب أيضاً
+		// 3. استدعاء Warden Minion غاضب
 		if (tickCounter % 400 == 0) {
 			ServerWorld world = (ServerWorld) phase3Boss.getEntityWorld();
 			WardenEntity minionWarden = new WardenEntity(EntityType.WARDEN, world);
