@@ -10,15 +10,15 @@ import net.minecraft.enchantment.Enchantments;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.ItemEntity;
+import net.minecraft.entity.LightningEntity;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.boss.BossBar;
 import net.minecraft.entity.boss.ServerBossBar;
+import net.minecraft.entity.boss.WitherEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.mob.EndermanEntity;
 import net.minecraft.entity.mob.SkeletonEntity;
-import net.minecraft.entity.mob.VexEntity;
-import net.minecraft.entity.mob.WardenEntity;
 import net.minecraft.entity.mob.WitherSkeletonEntity;
 import net.minecraft.entity.projectile.FireballEntity;
 import net.minecraft.item.ItemStack;
@@ -47,7 +47,7 @@ public class NightmareRealms implements ModInitializer {
 
 	private static EndermanEntity phase1Boss;
 	private static WitherSkeletonEntity phase2Boss;
-	private static WardenEntity phase3Boss;
+	private static WitherEntity phase3Boss;
 
 	@Override
 	public void onInitialize() {
@@ -104,7 +104,7 @@ public class NightmareRealms implements ModInitializer {
 		}
 
 		startBossFight(source.getWorld(), player.getBlockPos(), player);
-		source.sendFeedback(() -> Text.literal("حقبة الكوابيس قد بدأت! استعد لمواجهة الواردن والحلبة المغلقة!").formatted(Formatting.DARK_RED, Formatting.BOLD), true);
+		source.sendFeedback(() -> Text.literal("حقبة الكوابيس قد بدأت! استعد للقتال الحاسم!").formatted(Formatting.DARK_RED, Formatting.BOLD), true);
 		return 1;
 	}
 
@@ -220,30 +220,25 @@ public class NightmareRealms implements ModInitializer {
 		currentPhase = 3;
 		ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
 
-		bossBar.setName(Text.literal("Nightmare Warden - Final Phase").formatted(Formatting.DARK_AQUA, Formatting.BOLD));
-		bossBar.setColor(BossBar.Color.BLUE);
+		bossBar.setName(Text.literal("Nightmare Wither - Final Phase").formatted(Formatting.DARK_GRAY, Formatting.BOLD));
+		bossBar.setColor(BossBar.Color.WHITE);
 
-		// حلبة 15x15 Deep Dark Cave
-		buildEnclosedArena(world, arenaCenter, Blocks.SCULK, Blocks.REINFORCED_DEEPSLATE, 7, 7);
+		// حلبة نذرية متينة للمرحلة الأخيرة
+		buildEnclosedArena(world, arenaCenter, Blocks.BEDROCK, Blocks.OBSIDIAN, 7, 7);
 
-		phase3Boss = new WardenEntity(EntityType.WARDEN, world);
-		phase3Boss.refreshPositionAndAngles(arenaCenter.getX() + 0.5, arenaCenter.getY() + 1, arenaCenter.getZ() + 0.5, 0, 0);
+		phase3Boss = new WitherEntity(EntityType.WITHER, world);
+		phase3Boss.refreshPositionAndAngles(arenaCenter.getX() + 0.5, arenaCenter.getY() + 2, arenaCenter.getZ() + 0.5, 0, 0);
 
-		phase3Boss.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(600.0);
-		phase3Boss.setHealth(600.0f);
-		phase3Boss.getAttributeInstance(EntityAttributes.ATTACK_DAMAGE).setBaseValue(18.0);
-		phase3Boss.setCustomName(Text.literal("Nightmare Warden").formatted(Formatting.DARK_AQUA, Formatting.BOLD));
+		// دم اقل (350 HP)
+		phase3Boss.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(350.0);
+		phase3Boss.setHealth(350.0f);
+		phase3Boss.setCustomName(Text.literal("Nightmare Wither").formatted(Formatting.DARK_GRAY, Formatting.BOLD));
 		phase3Boss.setCustomNameVisible(true);
-
-		phase3Boss.setPersistent();
 
 		if (!bossBar.getPlayers().isEmpty()) {
 			ServerPlayerEntity targetPlayer = bossBar.getPlayers().iterator().next();
 			targetPlayer.requestTeleport(arenaCenter.getX() + 0.5, arenaCenter.getY() + 1, arenaCenter.getZ() + 3.0);
-			targetPlayer.addStatusEffect(new StatusEffectInstance(StatusEffects.DARKNESS, 1200, 0));
-
 			phase3Boss.setTarget(targetPlayer);
-			phase3Boss.increaseAngerAt(targetPlayer, 300, true);
 		}
 
 		world.spawnEntity(phase3Boss);
@@ -261,33 +256,48 @@ public class NightmareRealms implements ModInitializer {
 		}
 		bossBar.setPercent(phase3Boss.getHealth() / phase3Boss.getMaxHealth());
 
-		// 1. تحديث هدف وغضب الواردن كل ثانية بدلاً من كل Frame لتجنب تجمد الـ AI
-		if (tickCounter % 20 == 0 && !bossBar.getPlayers().isEmpty()) {
-			ServerPlayerEntity targetPlayer = bossBar.getPlayers().iterator().next();
-			if (phase3Boss.getTarget() == null || !phase3Boss.getTarget().equals(targetPlayer)) {
-				phase3Boss.setTarget(targetPlayer);
+		ServerWorld world = (ServerWorld) phase3Boss.getEntityWorld();
+
+		if (!bossBar.getPlayers().isEmpty()) {
+			ServerPlayerEntity player = bossBar.getPlayers().iterator().next();
+
+			// الضربة الأولى: ضربة الموت الأسود (كل 10 ثوانٍ / 200 Ticks)
+			if (tickCounter % 200 == 0) {
+				player.damage(world, world.getDamageSources().wither(), 10.0f);
+				player.addStatusEffect(new StatusEffectInstance(StatusEffects.WITHER, 100, 1));
+				player.sendMessage(Text.literal("اصابتك ضربة الموت الأسود!").formatted(Formatting.DARK_GRAY, Formatting.BOLD), true);
 			}
-			phase3Boss.increaseAngerAt(targetPlayer, 50, true);
+
+			// الضربة الثانية: صاعقة الكوابيس (كل 18 ثانية / 360 Ticks)
+			if (tickCounter % 360 == 0) {
+				LightningEntity lightning = new LightningEntity(EntityType.LIGHTNING_BOLT, world);
+				lightning.refreshPositionAfterTeleport(player.getX(), player.getY(), player.getZ());
+				world.spawnEntity(lightning);
+				player.sendMessage(Text.literal("ضربتك صاعقة الكوابيس!").formatted(Formatting.GOLD, Formatting.BOLD), true);
+			}
+
+			// الضربة الثالثة: عمى الظلام المباشر (كل 25 ثانية / 500 Ticks)
+			if (tickCounter % 500 == 0) {
+				player.damage(world, world.getDamageSources().magic(), 12.0f);
+				player.addStatusEffect(new StatusEffectInstance(StatusEffects.BLINDNESS, 60, 0));
+				player.sendMessage(Text.literal("انتابك عمى الظلام المباشر!").formatted(Formatting.DARK_PURPLE, Formatting.BOLD), true);
+			}
 		}
 
-		// 2. علاج البوس كل 15 ثانية
+		// علاج الـ Wither كل 15 ثانية
 		if (tickCounter % 300 == 0) {
-			healBoss(phase3Boss, 600.0, 0.04);
+			healBoss(phase3Boss, 350.0, 0.04);
 		}
 
-		// 3. استدعاء أطياف كابوسية (Vex) بدلاً من Warden آخر لمنع الازدحام
+		// استدعاء مينيونز Wither Skeletons كل 20 ثانية
 		if (tickCounter % 400 == 0) {
-			ServerWorld world = (ServerWorld) phase3Boss.getEntityWorld();
 			for (int i = 0; i < 2; i++) {
-				VexEntity minion = new VexEntity(EntityType.VEX, world);
-				minion.refreshPositionAndAngles(phase3Boss.getBlockPos().add(i == 0 ? 1 : -1, 1, i == 0 ? 1 : -1), 0, 0);
-				minion.setCustomName(Text.literal("Nightmare Phantom").formatted(Formatting.DARK_AQUA));
-				minion.setCustomNameVisible(true);
-
-				if (phase3Boss.getTarget() instanceof ServerPlayerEntity player) {
-					minion.setTarget(player);
+				WitherSkeletonEntity minion = new WitherSkeletonEntity(EntityType.WITHER_SKELETON, world);
+				minion.refreshPositionAndAngles(phase3Boss.getBlockPos().add(i == 0 ? 1 : -1, 0, i == 0 ? 1 : -1), 0, 0);
+				minion.setCustomName(Text.literal("Wither Minion").formatted(Formatting.BLACK));
+				if (!bossBar.getPlayers().isEmpty()) {
+					minion.setTarget(bossBar.getPlayers().iterator().next());
 				}
-
 				world.spawnEntity(minion);
 			}
 		}
