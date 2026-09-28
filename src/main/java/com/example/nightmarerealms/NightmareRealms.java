@@ -5,8 +5,6 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.block.Blocks;
 import net.minecraft.component.DataComponentTypes;
-import net.minecraft.enchantment.EnchantmentHelper;
-import net.minecraft.enchantment.Enchantments;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.ItemEntity;
@@ -23,6 +21,9 @@ import net.minecraft.entity.projectile.FireballEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.registry.RegistryKeys;
+import net.minecraft.registry.entry.RegistryEntry;
+import net.minecraft.enchantment.Enchantment;
+import net.minecraft.enchantment.Enchantments;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -238,12 +239,11 @@ public class NightmareRealms implements ModInitializer {
 		phase3Boss.setCustomName(Text.literal("Nightmare Warden").formatted(Formatting.DARK_AQUA, Formatting.BOLD));
 		phase3Boss.setCustomNameVisible(true);
 
-		// حل مشكلة اختفاء الواردن والـ Digging:
-		phase3Boss.setPersistent(); // يمنع اختفاءه تلقائياً
+		phase3Boss.setPersistent();
 		if (!bossBar.getPlayers().isEmpty()) {
 			ServerPlayerEntity targetPlayer = bossBar.getPlayers().iterator().next();
 			phase3Boss.setTarget(targetPlayer);
-			phase3Boss.increaseAngerAt(targetPlayer, 150, true); // يخليه في حالة غضب قصوى فوراً
+			phase3Boss.increaseAngerAt(targetPlayer, 150, true);
 		}
 
 		world.spawnEntity(phase3Boss);
@@ -261,7 +261,6 @@ public class NightmareRealms implements ModInitializer {
 		}
 		bossBar.setPercent(phase3Boss.getHealth() / phase3Boss.getMaxHealth());
 
-		// إبقاء الواردن غاضباً ومستهدفاً للاعب لتفادي الاختفاء
 		if (tickCounter % 20 == 0 && !bossBar.getPlayers().isEmpty()) {
 			ServerPlayerEntity targetPlayer = bossBar.getPlayers().iterator().next();
 			phase3Boss.increaseAngerAt(targetPlayer, 50, false);
@@ -333,6 +332,10 @@ public class NightmareRealms implements ModInitializer {
 		}
 	}
 
+	private static RegistryEntry<Enchantment> getEnchantment(ServerWorld world, net.minecraft.registry.RegistryKey<Enchantment> key) {
+		return world.getRegistryManager().getOrEmpty(RegistryKeys.ENCHANTMENT).flatMap(registry -> registry.getEntry(key)).orElse(null);
+	}
+
 	private static void dropPhase1Loot(ServerWorld world, BlockPos pos) {
 		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.GOLDEN_APPLE, 6)));
 		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.ENDER_PEARL, 8)));
@@ -341,8 +344,12 @@ public class NightmareRealms implements ModInitializer {
 
 	private static void dropPhase2Loot(ServerWorld world, BlockPos pos) {
 		ItemStack enchantedBow = new ItemStack(Items.BOW);
-		enchantedBow.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.POWER).get(), 4);
-		enchantedBow.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.UNBREAKING).get(), 3);
+
+		RegistryEntry<Enchantment> power = getEnchantment(world, Enchantments.POWER);
+		RegistryEntry<Enchantment> unbreaking = getEnchantment(world, Enchantments.UNBREAKING);
+
+		if (power != null) enchantedBow.addEnchantment(power, 4);
+		if (unbreaking != null) enchantedBow.addEnchantment(unbreaking, 3);
 
 		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 3)));
 		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), enchantedBow));
@@ -350,27 +357,33 @@ public class NightmareRealms implements ModInitializer {
 	}
 
 	private static void dropFinalLoot(ServerWorld world, BlockPos pos) {
-		// سيف نذرايت مطور بأقوى السحريات
+		RegistryEntry<Enchantment> sharpness = getEnchantment(world, Enchantments.SHARPNESS);
+		RegistryEntry<Enchantment> unbreaking = getEnchantment(world, Enchantments.UNBREAKING);
+		RegistryEntry<Enchantment> looting = getEnchantment(world, Enchantments.LOOTING);
+		RegistryEntry<Enchantment> protection = getEnchantment(world, Enchantments.PROTECTION);
+		RegistryEntry<Enchantment> mending = getEnchantment(world, Enchantments.MENDING);
+
+		// سيف نذرايت مطور
 		ItemStack sword = new ItemStack(Items.NETHERITE_SWORD);
 		sword.set(DataComponentTypes.CUSTOM_NAME, Text.literal("قاهر الكوابيس الأسطوري").formatted(Formatting.GOLD, Formatting.BOLD));
-		sword.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.SHARPNESS).get(), 5);
-		sword.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.UNBREAKING).get(), 3);
-		sword.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.LOOTING).get(), 3);
+		if (sharpness != null) sword.addEnchantment(sharpness, 5);
+		if (unbreaking != null) sword.addEnchantment(unbreaking, 3);
+		if (looting != null) sword.addEnchantment(looting, 3);
 
-		// درع صدرية نذرايت مطورة
+		// درع صدرية
 		ItemStack chest = new ItemStack(Items.NETHERITE_CHESTPLATE);
-		chest.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.PROTECTION).get(), 4);
-		chest.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.UNBREAKING).get(), 3);
+		if (protection != null) chest.addEnchantment(protection, 4);
+		if (unbreaking != null) chest.addEnchantment(unbreaking, 3);
 
-		// خوذة نذرايت مطورة
+		// خوذة
 		ItemStack helmet = new ItemStack(Items.NETHERITE_HELMET);
-		helmet.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.PROTECTION).get(), 4);
-		helmet.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.UNBREAKING).get(), 3);
+		if (protection != null) helmet.addEnchantment(protection, 4);
+		if (unbreaking != null) helmet.addEnchantment(unbreaking, 3);
 
-		// أجنحة مطورة
+		// أجنحة
 		ItemStack elytra = new ItemStack(Items.ELYTRA);
-		elytra.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.UNBREAKING).get(), 3);
-		elytra.addEnchantment(world.getRegistryManager().get(RegistryKeys.ENCHANTMENT).getEntry(Enchantments.MENDING).get(), 1);
+		if (unbreaking != null) elytra.addEnchantment(unbreaking, 3);
+		if (mending != null) elytra.addEnchantment(mending, 1);
 
 		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), sword));
 		world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), chest));
