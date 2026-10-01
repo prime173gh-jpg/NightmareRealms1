@@ -21,13 +21,9 @@ import net.minecraft.entity.mob.EndermanEntity;
 import net.minecraft.entity.mob.SkeletonEntity;
 import net.minecraft.entity.mob.WitherSkeletonEntity;
 import net.minecraft.entity.projectile.FireballEntity;
-import net.minecraft.item.ArmorItem;
-import net.minecraft.item.ArmorMaterials;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
-import net.minecraft.item.SwordItem;
-import net.minecraft.item.ToolMaterials;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
 import net.minecraft.registry.RegistryKey;
@@ -57,21 +53,21 @@ public class NightmareRealms implements ModInitializer {
 	public static final Item ENDERMITE_CHESTPLATE = Registry.register(
 		Registries.ITEM,
 		Identifier.of(MOD_ID, "endermite_chestplate"),
-		new ArmorItem(ArmorMaterials.NETHERITE, ArmorItem.Type.CHESTPLATE, new Item.Settings().maxDamage(500))
+		new Item(new Item.Settings().maxDamage(500))
 	);
 
 	// 2. سيف الكوابيس (ينزل بعد Phase 2)
 	public static final Item DREAD_BLADE = Registry.register(
 		Registries.ITEM,
 		Identifier.of(MOD_ID, "dread_blade"),
-		new SwordItem(ToolMaterials.NETHERITE, 4, -2.4f, new Item.Settings().maxDamage(2031))
+		new Item(new Item.Settings().maxDamage(2031))
 	);
 
 	// 3. تاج الكوابيس (ينزل بعد Phase 3)
 	public static final Item NIGHTMARE_CROWN = Registry.register(
 		Registries.ITEM,
 		Identifier.of(MOD_ID, "nightmare_crown"),
-		new ArmorItem(ArmorMaterials.NETHERITE, ArmorItem.Type.HELMET, new Item.Settings().maxDamage(600))
+		new Item(new Item.Settings().maxDamage(600))
 	);
 
 	// =======================================================================
