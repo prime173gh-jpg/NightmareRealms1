@@ -21,9 +21,15 @@ import net.minecraft.entity.mob.EndermanEntity;
 import net.minecraft.entity.mob.SkeletonEntity;
 import net.minecraft.entity.mob.WitherSkeletonEntity;
 import net.minecraft.entity.projectile.FireballEntity;
+import net.minecraft.item.ArmorItem;
+import net.minecraft.item.ArmorMaterials;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
+import net.minecraft.item.SwordItem;
+import net.minecraft.item.ToolMaterials;
+import net.minecraft.registry.Registries;
+import net.minecraft.registry.Registry;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.registry.entry.RegistryEntry;
@@ -33,6 +39,7 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 
@@ -43,6 +50,31 @@ import java.util.Random;
 public class NightmareRealms implements ModInitializer {
 
 	public static final String MOD_ID = "nightmarerealms";
+
+	// ==================== تسجيل المواد المخصصة الجديدة ====================
+	
+	// 1. درع الأندرميت (ينزل بعد Phase 1)
+	public static final Item ENDERMITE_CHESTPLATE = Registry.register(
+		Registries.ITEM,
+		Identifier.of(MOD_ID, "endermite_chestplate"),
+		new ArmorItem(ArmorMaterials.NETHERITE, ArmorItem.Type.CHESTPLATE, new Item.Settings().maxDamage(500))
+	);
+
+	// 2. سيف الكوابيس (ينزل بعد Phase 2)
+	public static final Item DREAD_BLADE = Registry.register(
+		Registries.ITEM,
+		Identifier.of(MOD_ID, "dread_blade"),
+		new SwordItem(ToolMaterials.NETHERITE, 4, -2.4f, new Item.Settings().maxDamage(2031))
+	);
+
+	// 3. تاج الكوابيس (ينزل بعد Phase 3)
+	public static final Item NIGHTMARE_CROWN = Registry.register(
+		Registries.ITEM,
+		Identifier.of(MOD_ID, "nightmare_crown"),
+		new ArmorItem(ArmorMaterials.NETHERITE, ArmorItem.Type.HELMET, new Item.Settings().maxDamage(600))
+	);
+
+	// =======================================================================
 
 	private static ServerBossBar bossBar;
 	private static int currentPhase = 0;
@@ -364,11 +396,25 @@ public class NightmareRealms implements ModInitializer {
 		return world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT).getOptional(key).orElse(null);
 	}
 
-	// ==================== نظام اللوت العشوائي ====================
+	// ==================== نظام اللوت العشوائي والتسقيط المخصص ====================
 
 	private static void dropRandomizedLoot(ServerWorld world, BlockPos pos, int phase) {
-		int numberOfItems = 3 + random.nextInt(phase + 2);
+		// 1. تسقيط الأيتم الخاص بالمرحلة بشكل مضمون
+		ItemStack guaranteedCustomLoot = ItemStack.EMPTY;
+		if (phase == 1) {
+			guaranteedCustomLoot = new ItemStack(ENDERMITE_CHESTPLATE);
+		} else if (phase == 2) {
+			guaranteedCustomLoot = new ItemStack(DREAD_BLADE);
+		} else if (phase == 3) {
+			guaranteedCustomLoot = new ItemStack(NIGHTMARE_CROWN);
+		}
 
+		if (!guaranteedCustomLoot.isEmpty()) {
+			world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), guaranteedCustomLoot));
+		}
+
+		// 2. تسقيط بقية المكافآت العشوائية
+		int numberOfItems = 3 + random.nextInt(phase + 2);
 		for (int i = 0; i < numberOfItems; i++) {
 			ItemStack lootItem = generateRandomItem(world, phase);
 			if (!lootItem.isEmpty()) {
