@@ -42,33 +42,32 @@ import net.minecraft.util.math.Vec3d;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.function.Function;
 
 public class NightmareRealms implements ModInitializer {
 
 	public static final String MOD_ID = "nightmarerealms";
 
-	// ==================== تسجيل المواد المخصصة الجديدة ====================
-	
+	// ==================== تسجيل المواد المخصصة بعد التعديل لـ 1.21.2+ ====================
+
+	private static Item registerItem(String name, Function<Item.Settings, Item> factory, int maxDamage) {
+		RegistryKey<Item> key = RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, name));
+		Item.Settings settings = new Item.Settings().registryKey(key);
+		if (maxDamage > 0) {
+			settings.maxDamage(maxDamage);
+		}
+		Item item = factory.apply(settings);
+		return Registry.register(Registries.ITEM, key, item);
+	}
+
 	// 1. درع الأندرميت (ينزل بعد Phase 1)
-	public static final Item ENDERMITE_CHESTPLATE = Registry.register(
-		Registries.ITEM,
-		Identifier.of(MOD_ID, "endermite_chestplate"),
-		new Item(new Item.Settings().maxDamage(500))
-	);
+	public static final Item ENDERMITE_CHESTPLATE = registerItem("endermite_chestplate", Item::new, 500);
 
 	// 2. سيف الكوابيس (ينزل بعد Phase 2)
-	public static final Item DREAD_BLADE = Registry.register(
-		Registries.ITEM,
-		Identifier.of(MOD_ID, "dread_blade"),
-		new Item(new Item.Settings().maxDamage(2031))
-	);
+	public static final Item DREAD_BLADE = registerItem("dread_blade", Item::new, 2031);
 
 	// 3. تاج الكوابيس (ينزل بعد Phase 3)
-	public static final Item NIGHTMARE_CROWN = Registry.register(
-		Registries.ITEM,
-		Identifier.of(MOD_ID, "nightmare_crown"),
-		new Item(new Item.Settings().maxDamage(600))
-	);
+	public static final Item NIGHTMARE_CROWN = registerItem("nightmare_crown", Item::new, 600);
 
 	// =======================================================================
 
@@ -83,7 +82,6 @@ public class NightmareRealms implements ModInitializer {
 	private static WitherSkeletonEntity phase2Boss;
 	private static WitherEntity phase3Boss;
 
-	// نصف قطر 15 يجعل الحلبة بمساحة 30x30
 	private static final int ARENA_RADIUS = 15;
 	private static final int ARENA_HEIGHT = 7;
 
@@ -176,7 +174,6 @@ public class NightmareRealms implements ModInitializer {
 		}
 		bossBar.setPercent(phase1Boss.getHealth() / phase1Boss.getMaxHealth());
 
-		// هيل 15% كل 13 ثانية (260 تيك)
 		if (tickCounter % 260 == 0) {
 			healBoss(phase1Boss, 300.0, 0.15);
 		}
@@ -233,7 +230,6 @@ public class NightmareRealms implements ModInitializer {
 		}
 		bossBar.setPercent(phase2Boss.getHealth() / phase2Boss.getMaxHealth());
 
-		// هيل 15% كل 13 ثانية (260 تيك)
 		if (tickCounter % 260 == 0) {
 			healBoss(phase2Boss, 450.0, 0.15);
 		}
@@ -322,7 +318,6 @@ public class NightmareRealms implements ModInitializer {
 			}
 		}
 
-		// هيل 15% كل 13 ثانية (260 تيك)
 		if (tickCounter % 260 == 0) {
 			healBoss(phase3Boss, 350.0, 0.15);
 		}
@@ -345,24 +340,20 @@ public class NightmareRealms implements ModInitializer {
 		boss.heal(healAmount);
 	}
 
-	// بناء الحلبة 30x30 وتأمين إضاءتها بـ Sea Lanterns
 	private static void buildEnclosedArena(ServerWorld world, BlockPos center, int radius, int height) {
 		for (int x = -radius; x <= radius; x++) {
 			for (int z = -radius; z <= radius; z++) {
-				// الأرضية والسقف بيدروك
 				world.setBlockState(center.add(x, -1, z), Blocks.BEDROCK.getDefaultState());
 				world.setBlockState(center.add(x, height, z), Blocks.BEDROCK.getDefaultState());
 
 				for (int y = 0; y < height; y++) {
 					if (Math.abs(x) == radius || Math.abs(z) == radius) {
-						// إضاءة أركان الجدران
 						if ((Math.abs(x) == radius - 3 || Math.abs(x) == radius) && (Math.abs(z) == radius - 3 || Math.abs(z) == radius) && y == 3) {
 							world.setBlockState(center.add(x, y, z), Blocks.SEA_LANTERN.getDefaultState());
 						} else {
 							world.setBlockState(center.add(x, y, z), Blocks.BEDROCK.getDefaultState());
 						}
 					} else {
-						// إضاءة ملفتة وموزعة في السقف
 						if (y == height - 1 && (Math.abs(x) % 6 == 0 && Math.abs(z) % 6 == 0)) {
 							world.setBlockState(center.add(x, y, z), Blocks.SEA_LANTERN.getDefaultState());
 						} else {
@@ -374,7 +365,6 @@ public class NightmareRealms implements ModInitializer {
 		}
 	}
 
-	// إزالة الحلبة بالكامل بعد القتال
 	private static void clearArena(ServerWorld world, BlockPos center, int radius, int height) {
 		for (int x = -radius; x <= radius; x++) {
 			for (int z = -radius; z <= radius; z++) {
@@ -392,10 +382,7 @@ public class NightmareRealms implements ModInitializer {
 		return world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT).getOptional(key).orElse(null);
 	}
 
-	// ==================== نظام اللوت العشوائي والتسقيط المخصص ====================
-
 	private static void dropRandomizedLoot(ServerWorld world, BlockPos pos, int phase) {
-		// 1. تسقيط الأيتم الخاص بالمرحلة بشكل مضمون
 		ItemStack guaranteedCustomLoot = ItemStack.EMPTY;
 		if (phase == 1) {
 			guaranteedCustomLoot = new ItemStack(ENDERMITE_CHESTPLATE);
@@ -409,7 +396,6 @@ public class NightmareRealms implements ModInitializer {
 			world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), guaranteedCustomLoot));
 		}
 
-		// 2. تسقيط بقية المكافآت العشوائية
 		int numberOfItems = 3 + random.nextInt(phase + 2);
 		for (int i = 0; i < numberOfItems; i++) {
 			ItemStack lootItem = generateRandomItem(world, phase);
