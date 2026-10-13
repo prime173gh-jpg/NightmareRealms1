@@ -5,6 +5,7 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.block.Blocks;
 import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.ItemEnchantmentsComponent;
 import net.minecraft.enchantment.Enchantment;
 import net.minecraft.enchantment.Enchantments;
 import net.minecraft.entity.EntityType;
@@ -24,8 +25,6 @@ import net.minecraft.entity.projectile.FireballEntity;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.Registry;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.registry.entry.RegistryEntry;
@@ -35,41 +34,16 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-import java.util.function.Function;
 
 public class NightmareRealms implements ModInitializer {
 
 	public static final String MOD_ID = "nightmarerealms";
-
-	// ==================== تسجيل المواد المخصصة بعد التعديل لـ 1.21.2+ ====================
-
-	private static Item registerItem(String name, Function<Item.Settings, Item> factory, int maxDamage) {
-		RegistryKey<Item> key = RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, name));
-		Item.Settings settings = new Item.Settings().registryKey(key);
-		if (maxDamage > 0) {
-			settings.maxDamage(maxDamage);
-		}
-		Item item = factory.apply(settings);
-		return Registry.register(Registries.ITEM, key, item);
-	}
-
-	// 1. درع الأندرميت (ينزل بعد Phase 1)
-	public static final Item ENDERMITE_CHESTPLATE = registerItem("endermite_chestplate", Item::new, 500);
-
-	// 2. سيف الكوابيس (ينزل بعد Phase 2)
-	public static final Item DREAD_BLADE = registerItem("dread_blade", Item::new, 2031);
-
-	// 3. تاج الكوابيس (ينزل بعد Phase 3)
-	public static final Item NIGHTMARE_CROWN = registerItem("nightmare_crown", Item::new, 600);
-
-	// =======================================================================
 
 	private static ServerBossBar bossBar;
 	private static int currentPhase = 0;
@@ -382,20 +356,36 @@ public class NightmareRealms implements ModInitializer {
 		return world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT).getOptional(key).orElse(null);
 	}
 
+	// ==================== نظام اللوت الخاص بالسيرفر (بدون تعديلات العميل) ====================
+
 	private static void dropRandomizedLoot(ServerWorld world, BlockPos pos, int phase) {
-		ItemStack guaranteedCustomLoot = ItemStack.EMPTY;
+		// مكافأة مميزة ومخصصة لكل مرحلة (Vanilla Items بألوان وأسماء أسطورية)
+		ItemStack specialReward = ItemStack.EMPTY;
+		RegistryEntry<Enchantment> sharpness = getEnchantment(world, Enchantments.SHARPNESS);
+		RegistryEntry<Enchantment> protection = getEnchantment(world, Enchantments.PROTECTION);
+		RegistryEntry<Enchantment> unbreaking = getEnchantment(world, Enchantments.UNBREAKING);
+
 		if (phase == 1) {
-			guaranteedCustomLoot = new ItemStack(ENDERMITE_CHESTPLATE);
+			specialReward = new ItemStack(Items.NETHERITE_CHESTPLATE);
+			specialReward.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Endermite Chestplate").formatted(Formatting.DARK_PURPLE, Formatting.BOLD));
+			if (protection != null) specialReward.addEnchantment(protection, 4);
 		} else if (phase == 2) {
-			guaranteedCustomLoot = new ItemStack(DREAD_BLADE);
+			specialReward = new ItemStack(Items.NETHERITE_SWORD);
+			specialReward.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Dread Blade").formatted(Formatting.RED, Formatting.BOLD));
+			if (sharpness != null) specialReward.addEnchantment(sharpness, 5);
+			if (unbreaking != null) specialReward.addEnchantment(unbreaking, 3);
 		} else if (phase == 3) {
-			guaranteedCustomLoot = new ItemStack(NIGHTMARE_CROWN);
+			specialReward = new ItemStack(Items.NETHERITE_HELMET);
+			specialReward.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Nightmare Crown").formatted(Formatting.GOLD, Formatting.BOLD));
+			if (protection != null) specialReward.addEnchantment(protection, 5);
+			if (unbreaking != null) specialReward.addEnchantment(unbreaking, 3);
 		}
 
-		if (!guaranteedCustomLoot.isEmpty()) {
-			world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), guaranteedCustomLoot));
+		if (!specialReward.isEmpty()) {
+			world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), specialReward));
 		}
 
+		// باقي اللوت العشوائي
 		int numberOfItems = 3 + random.nextInt(phase + 2);
 		for (int i = 0; i < numberOfItems; i++) {
 			ItemStack lootItem = generateRandomItem(world, phase);
