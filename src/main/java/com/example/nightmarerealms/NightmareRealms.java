@@ -85,16 +85,16 @@ public class NightmareRealms implements ModInitializer {
 				return;
 			}
 
-			// تحديث تأثيرات الـ Aura للبوسات الشغالة
+			// تحديث تأثيرات الـ Aura باستخدام الاحداثيات المباشرة بدلاً من getPos()
 			if (currentPhase == 1 && phase1Boss != null && phase1Boss.isAlive()) {
 				updatePhase1();
-				spawnBossAura((ServerWorld) phase1Boss.getEntityWorld(), phase1Boss.getPos(), 1);
+				spawnBossAura((ServerWorld) phase1Boss.getEntityWorld(), phase1Boss.getX(), phase1Boss.getY(), phase1Boss.getZ(), 1);
 			} else if (currentPhase == 2 && phase2Boss != null && phase2Boss.isAlive()) {
 				updatePhase2();
-				spawnBossAura((ServerWorld) phase2Boss.getEntityWorld(), phase2Boss.getPos(), 2);
+				spawnBossAura((ServerWorld) phase2Boss.getEntityWorld(), phase2Boss.getX(), phase2Boss.getY(), phase2Boss.getZ(), 2);
 			} else if (currentPhase == 3 && phase3Boss != null && phase3Boss.isAlive()) {
 				updatePhase3();
-				spawnBossAura((ServerWorld) phase3Boss.getEntityWorld(), phase3Boss.getPos(), 3);
+				spawnBossAura((ServerWorld) phase3Boss.getEntityWorld(), phase3Boss.getX(), phase3Boss.getY(), phase3Boss.getZ(), 3);
 			}
 		});
 
@@ -131,10 +131,8 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setColor(BossBar.Color.PURPLE);
 		bossBar.setVisible(true);
 
-		// بناء الحلبة الفخمة ذات الجدار الشفاف والمفتوحة للسماء
 		buildCustomArena(world, pos, ARENA_RADIUS, ARENA_HEIGHT);
 
-		// دخّلة Phase 1 الأسطورية
 		playEntranceEffects(world, pos, 1);
 
 		phase1Boss = new EndermanEntity(EntityType.ENDERMAN, world);
@@ -165,7 +163,6 @@ public class NightmareRealms implements ModInitializer {
 			ServerWorld world = (ServerWorld) phase1Boss.getEntityWorld();
 			BlockPos targetPos = phase1Boss.getTarget().getBlockPos().add(world.random.nextInt(7) - 3, 0, world.random.nextInt(7) - 3);
 			
-			// التأكد من أن التلبرت يظل داخل حدود الحلبة الشفافة
 			if (targetPos.getSquaredDistance(arenaCenter) < (ARENA_RADIUS - 2) * (ARENA_RADIUS - 2)) {
 				phase1Boss.teleport(targetPos.getX(), targetPos.getY(), targetPos.getZ(), true);
 				world.spawnParticles(ParticleTypes.PORTAL, phase1Boss.getX(), phase1Boss.getY() + 1, phase1Boss.getZ(), 30, 0.5, 1.0, 0.5, 0.1);
@@ -193,7 +190,6 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setName(Text.literal("Dread Knight - Phase II").formatted(Formatting.DARK_RED, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.RED);
 
-		// دخّلة Phase 2
 		playEntranceEffects(world, arenaCenter, 2);
 
 		phase2Boss = new WitherSkeletonEntity(EntityType.WITHER_SKELETON, world);
@@ -248,7 +244,6 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setName(Text.literal("Nightmare Wither - Final Phase").formatted(Formatting.DARK_GRAY, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.WHITE);
 
-		// دخّلة Phase 3 الأسطورية
 		playEntranceEffects(world, arenaCenter, 3);
 
 		phase3Boss = new WitherEntity(EntityType.WITHER, world);
@@ -325,7 +320,7 @@ public class NightmareRealms implements ModInitializer {
 		}
 	}
 
-	// ==================== المؤثرات والدخلات (Entrances & Aura) ====================
+	// ==================== اصلاحات المؤثرات والمواقع ====================
 
 	private static void playEntranceEffects(ServerWorld world, BlockPos pos, int phase) {
 		double x = pos.getX() + 0.5;
@@ -334,8 +329,8 @@ public class NightmareRealms implements ModInitializer {
 
 		if (phase == 1) {
 			world.playSound(null, pos, SoundEvents.ENTITY_ENDER_DRAGON_GROWL, SoundCategory.HOSTILE, 2.0f, 0.5f);
-			world.spawnParticles(ParticleTypes.DRAGON_BREATH, x, y, z, 200, 1.5, 2.0, 1.5, 0.1);
-			world.spawnParticles(ParticleTypes.WITCH, x, y, z, 150, 2.0, 2.0, 2.0, 0.1);
+			world.spawnParticles(ParticleTypes.WITCH, x, y, z, 200, 1.5, 2.0, 1.5, 0.1);
+			world.spawnParticles(ParticleTypes.PORTAL, x, y, z, 150, 2.0, 2.0, 2.0, 0.1);
 		} else if (phase == 2) {
 			world.playSound(null, pos, SoundEvents.ENTITY_GENERIC_EXPLODE.value(), SoundCategory.HOSTILE, 2.0f, 0.8f);
 			world.spawnParticles(ParticleTypes.EXPLOSION_EMITTER, x, y, z, 5, 0, 0, 0, 0);
@@ -351,16 +346,16 @@ public class NightmareRealms implements ModInitializer {
 		}
 	}
 
-	private static void spawnBossAura(ServerWorld world, Vec3d pos, int phase) {
+	private static void spawnBossAura(ServerWorld world, double x, double y, double z, int phase) {
 		if (phase == 1) {
-			world.spawnParticles(ParticleTypes.PORTAL, pos.x, pos.y + 1.0, pos.z, 6, 0.4, 0.8, 0.4, 0.05);
-			world.spawnParticles(ParticleTypes.REVERSE_PORTAL, pos.x, pos.y + 0.5, pos.z, 4, 0.3, 0.5, 0.3, 0.02);
+			world.spawnParticles(ParticleTypes.PORTAL, x, y + 1.0, z, 6, 0.4, 0.8, 0.4, 0.05);
+			world.spawnParticles(ParticleTypes.REVERSE_PORTAL, x, y + 0.5, z, 4, 0.3, 0.5, 0.3, 0.02);
 		} else if (phase == 2) {
-			world.spawnParticles(ParticleTypes.FLAME, pos.x, pos.y + 1.0, pos.z, 8, 0.5, 0.8, 0.5, 0.03);
-			world.spawnParticles(ParticleTypes.SMOKE, pos.x, pos.y + 1.5, pos.z, 4, 0.3, 0.5, 0.3, 0.01);
+			world.spawnParticles(ParticleTypes.FLAME, x, y + 1.0, z, 8, 0.5, 0.8, 0.5, 0.03);
+			world.spawnParticles(ParticleTypes.SMOKE, x, y + 1.5, z, 4, 0.3, 0.5, 0.3, 0.01);
 		} else if (phase == 3) {
-			world.spawnParticles(ParticleTypes.SOUL_FIRE_FLAME, pos.x, pos.y + 1.2, pos.z, 10, 0.6, 0.8, 0.6, 0.04);
-			world.spawnParticles(ParticleTypes.SCULK_SOUL, pos.x, pos.y + 0.5, pos.z, 5, 0.5, 0.5, 0.5, 0.02);
+			world.spawnParticles(ParticleTypes.SOUL_FIRE_FLAME, x, y + 1.2, z, 10, 0.6, 0.8, 0.6, 0.04);
+			world.spawnParticles(ParticleTypes.SCULK_SOUL, x, y + 0.5, z, 5, 0.5, 0.5, 0.5, 0.02);
 		}
 	}
 
@@ -371,7 +366,6 @@ public class NightmareRealms implements ModInitializer {
 			for (int z = -radius; z <= radius; z++) {
 				double distance = Math.sqrt(x * x + z * z);
 
-				// أرضية دائرية زخرفية (Colosseum Floor)
 				if (distance <= radius) {
 					BlockPos floorPos = center.add(x, -1, z);
 					if (distance > radius - 2) {
@@ -382,22 +376,18 @@ public class NightmareRealms implements ModInitializer {
 						world.setBlockState(floorPos, Blocks.POLISHED_DEEPSLATE.getDefaultState());
 					}
 
-					// إضاءة ومجامر نارية في الأركان الدائرية
 					if ((Math.abs(x) == 8 && Math.abs(z) == 8) || (Math.abs(x) == 0 && Math.abs(z) == 12) || (Math.abs(x) == 12 && Math.abs(z) == 0)) {
 						world.setBlockState(center.add(x, 0, z), Blocks.SOUL_CAMPFIRE.getDefaultState());
 					}
 				}
 
-				// الجدران الشفافة الفخمة والمفتوحة للسماء
 				for (int y = 0; y < height; y++) {
 					BlockPos pos = center.add(x, y, z);
 
 					if (distance >= radius - 1 && distance <= radius) {
 						if (y == 0) {
-							// حافة حجرية سفلية
 							world.setBlockState(pos, Blocks.POLISHED_BLACKSTONE_WALL.getDefaultState());
 						} else {
-							// جدار شفاف ممتد لأعلى يمنع هروب الأندرمان واللاعبين ومفتوح للسماء
 							world.setBlockState(pos, Blocks.TINTED_GLASS.getDefaultState());
 						}
 					} else if (distance < radius - 1) {
