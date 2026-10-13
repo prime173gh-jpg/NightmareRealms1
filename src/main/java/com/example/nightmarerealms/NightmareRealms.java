@@ -24,6 +24,8 @@ import net.minecraft.entity.projectile.FireballEntity;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
+import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
+import net.minecraft.network.packet.s2c.play.SubtitleS2CPacket;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
@@ -58,8 +60,9 @@ public class NightmareRealms implements ModInitializer {
 	private static WitherSkeletonEntity phase2Boss;
 	private static WitherEntity phase3Boss;
 
-	private static final int ARENA_RADIUS = 14;
-	private static final int ARENA_HEIGHT = 8;
+	// حلبة ضخمة 64×64 (نصف القطر 32)
+	private static final int ARENA_RADIUS = 32;
+	private static final int ARENA_HEIGHT = 12;
 
 	@Override
 	public void onInitialize() {
@@ -85,7 +88,7 @@ public class NightmareRealms implements ModInitializer {
 				return;
 			}
 
-			// تحديث تأثيرات الـ Aura باستخدام الاحداثيات المباشرة بدلاً من getPos()
+			// تحديث تأثيرات الهالة والتحكم في حدود الأندرمان داخل الحلبة 64×64
 			if (currentPhase == 1 && phase1Boss != null && phase1Boss.isAlive()) {
 				updatePhase1();
 				spawnBossAura((ServerWorld) phase1Boss.getEntityWorld(), phase1Boss.getX(), phase1Boss.getY(), phase1Boss.getZ(), 1);
@@ -131,8 +134,11 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setColor(BossBar.Color.PURPLE);
 		bossBar.setVisible(true);
 
-		buildCustomArena(world, pos, ARENA_RADIUS, ARENA_HEIGHT);
+		// 1. بناء الحلبة 64×64 بـ Barrier Blocks
+		buildColosseumArena(world, pos, ARENA_RADIUS, ARENA_HEIGHT);
 
+		// 2. انترو سينمائي ملحمي
+		showCinematicIntro(player, "⚡ SHADOW SOVEREIGN ⚡", "Phase I: The Darkness Awakens", Formatting.DARK_PURPLE);
 		playEntranceEffects(world, pos, 1);
 
 		phase1Boss = new EndermanEntity(EntityType.ENDERMAN, world);
@@ -155,17 +161,22 @@ public class NightmareRealms implements ModInitializer {
 		}
 		bossBar.setPercent(phase1Boss.getHealth() / phase1Boss.getMaxHealth());
 
+		// حصر الأندرمان داخل حدود الحلبة الـ Barrier لمنع التلبرت البعيد جداً عند ضربه بنار
+		if (phase1Boss.getBlockPos().getSquaredDistance(arenaCenter) > (ARENA_RADIUS - 3) * (ARENA_RADIUS - 3)) {
+			phase1Boss.teleport(arenaCenter.getX() + 0.5, arenaCenter.getY() + 1, arenaCenter.getZ() + 0.5, true);
+		}
+
 		if (tickCounter % 260 == 0) {
 			healBoss(phase1Boss, 300.0, 0.15);
 		}
 
-		if (tickCounter % 40 == 0 && phase1Boss.getTarget() != null) {
+		if (tickCounter % 50 == 0 && phase1Boss.getTarget() != null) {
 			ServerWorld world = (ServerWorld) phase1Boss.getEntityWorld();
-			BlockPos targetPos = phase1Boss.getTarget().getBlockPos().add(world.random.nextInt(7) - 3, 0, world.random.nextInt(7) - 3);
+			BlockPos targetPos = phase1Boss.getTarget().getBlockPos().add(world.random.nextInt(11) - 5, 0, world.random.nextInt(11) - 5);
 			
-			if (targetPos.getSquaredDistance(arenaCenter) < (ARENA_RADIUS - 2) * (ARENA_RADIUS - 2)) {
+			if (targetPos.getSquaredDistance(arenaCenter) < (ARENA_RADIUS - 4) * (ARENA_RADIUS - 4)) {
 				phase1Boss.teleport(targetPos.getX(), targetPos.getY(), targetPos.getZ(), true);
-				world.spawnParticles(ParticleTypes.PORTAL, phase1Boss.getX(), phase1Boss.getY() + 1, phase1Boss.getZ(), 30, 0.5, 1.0, 0.5, 0.1);
+				world.spawnParticles(ParticleTypes.PORTAL, phase1Boss.getX(), phase1Boss.getY() + 1, phase1Boss.getZ(), 40, 0.5, 1.0, 0.5, 0.1);
 			}
 		}
 
@@ -186,10 +197,12 @@ public class NightmareRealms implements ModInitializer {
 	private static void startPhase2Actual() {
 		currentPhase = 2;
 		ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
+		ServerPlayerEntity player = bossBar.getPlayers().iterator().next();
 
 		bossBar.setName(Text.literal("Dread Knight - Phase II").formatted(Formatting.DARK_RED, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.RED);
 
+		showCinematicIntro(player, "🔥 DREAD KNIGHT 🔥", "Phase II: The Nether's Vengeance", Formatting.RED);
 		playEntranceEffects(world, arenaCenter, 2);
 
 		phase2Boss = new WitherSkeletonEntity(EntityType.WITHER_SKELETON, world);
@@ -240,10 +253,12 @@ public class NightmareRealms implements ModInitializer {
 	private static void startPhase3Actual() {
 		currentPhase = 3;
 		ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
+		ServerPlayerEntity player = bossBar.getPlayers().iterator().next();
 
 		bossBar.setName(Text.literal("Nightmare Wither - Final Phase").formatted(Formatting.DARK_GRAY, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.WHITE);
 
+		showCinematicIntro(player, "☠️ NIGHTMARE WITHER ☠️", "Final Phase: Face Absolute Death", Formatting.DARK_GRAY);
 		playEntranceEffects(world, arenaCenter, 3);
 
 		phase3Boss = new WitherEntity(EntityType.WITHER, world);
@@ -320,7 +335,13 @@ public class NightmareRealms implements ModInitializer {
 		}
 	}
 
-	// ==================== اصلاحات المؤثرات والمواقع ====================
+	// ==================== سينمائيات الانترو والمؤثرات ====================
+
+	private static void showCinematicIntro(ServerPlayerEntity player, String titleText, String subtitleText, Formatting color) {
+		player.networkHandler.sendPacket(new TitleS2CPacket(Text.literal(titleText).formatted(color, Formatting.BOLD)));
+		player.networkHandler.sendPacket(new SubtitleS2CPacket(Text.literal(subtitleText).formatted(Formatting.GRAY, Formatting.ITALIC)));
+		player.addStatusEffect(new StatusEffectInstance(StatusEffects.BLINDNESS, 30, 0, false, false));
+	}
 
 	private static void playEntranceEffects(ServerWorld world, BlockPos pos, int phase) {
 		double x = pos.getX() + 0.5;
@@ -328,59 +349,65 @@ public class NightmareRealms implements ModInitializer {
 		double z = pos.getZ() + 0.5;
 
 		if (phase == 1) {
-			world.playSound(null, pos, SoundEvents.ENTITY_ENDER_DRAGON_GROWL, SoundCategory.HOSTILE, 2.0f, 0.5f);
-			world.spawnParticles(ParticleTypes.WITCH, x, y, z, 200, 1.5, 2.0, 1.5, 0.1);
-			world.spawnParticles(ParticleTypes.PORTAL, x, y, z, 150, 2.0, 2.0, 2.0, 0.1);
+			world.playSound(null, pos, SoundEvents.ENTITY_ENDER_DRAGON_GROWL, SoundCategory.HOSTILE, 3.0f, 0.5f);
+			world.spawnParticles(ParticleTypes.WITCH, x, y, z, 300, 2.0, 3.0, 2.0, 0.1);
+			world.spawnParticles(ParticleTypes.PORTAL, x, y, z, 200, 3.0, 3.0, 3.0, 0.1);
 		} else if (phase == 2) {
-			world.playSound(null, pos, SoundEvents.ENTITY_GENERIC_EXPLODE.value(), SoundCategory.HOSTILE, 2.0f, 0.8f);
-			world.spawnParticles(ParticleTypes.EXPLOSION_EMITTER, x, y, z, 5, 0, 0, 0, 0);
-			world.spawnParticles(ParticleTypes.FLAME, x, y, z, 300, 2.0, 2.5, 2.0, 0.2);
+			world.playSound(null, pos, SoundEvents.ENTITY_GENERIC_EXPLODE.value(), SoundCategory.HOSTILE, 3.0f, 0.7f);
+			world.spawnParticles(ParticleTypes.EXPLOSION_EMITTER, x, y, z, 10, 0, 0, 0, 0);
+			world.spawnParticles(ParticleTypes.FLAME, x, y, z, 400, 3.0, 3.0, 3.0, 0.2);
 		} else if (phase == 3) {
 			LightningEntity lightning = new LightningEntity(EntityType.LIGHTNING_BOLT, world);
 			lightning.refreshPositionAfterTeleport(x, y, z);
 			world.spawnEntity(lightning);
 
-			world.playSound(null, pos, SoundEvents.ENTITY_WITHER_SPAWN, SoundCategory.HOSTILE, 2.0f, 0.6f);
-			world.spawnParticles(ParticleTypes.SOUL_FIRE_FLAME, x, y, z, 400, 2.5, 3.0, 2.5, 0.2);
-			world.spawnParticles(ParticleTypes.LARGE_SMOKE, x, y, z, 200, 2.0, 2.0, 2.0, 0.1);
+			world.playSound(null, pos, SoundEvents.ENTITY_WITHER_SPAWN, SoundCategory.HOSTILE, 3.0f, 0.5f);
+			world.spawnParticles(ParticleTypes.SOUL_FIRE_FLAME, x, y, z, 500, 3.5, 4.0, 3.5, 0.2);
+			world.spawnParticles(ParticleTypes.LARGE_SMOKE, x, y, z, 300, 3.0, 3.0, 3.0, 0.1);
 		}
 	}
 
 	private static void spawnBossAura(ServerWorld world, double x, double y, double z, int phase) {
 		if (phase == 1) {
-			world.spawnParticles(ParticleTypes.PORTAL, x, y + 1.0, z, 6, 0.4, 0.8, 0.4, 0.05);
-			world.spawnParticles(ParticleTypes.REVERSE_PORTAL, x, y + 0.5, z, 4, 0.3, 0.5, 0.3, 0.02);
+			world.spawnParticles(ParticleTypes.PORTAL, x, y + 1.0, z, 8, 0.5, 1.0, 0.5, 0.05);
+			world.spawnParticles(ParticleTypes.REVERSE_PORTAL, x, y + 0.5, z, 6, 0.4, 0.6, 0.4, 0.02);
 		} else if (phase == 2) {
-			world.spawnParticles(ParticleTypes.FLAME, x, y + 1.0, z, 8, 0.5, 0.8, 0.5, 0.03);
-			world.spawnParticles(ParticleTypes.SMOKE, x, y + 1.5, z, 4, 0.3, 0.5, 0.3, 0.01);
+			world.spawnParticles(ParticleTypes.FLAME, x, y + 1.0, z, 12, 0.6, 1.0, 0.6, 0.03);
+			world.spawnParticles(ParticleTypes.SMOKE, x, y + 1.5, z, 6, 0.4, 0.6, 0.4, 0.01);
 		} else if (phase == 3) {
-			world.spawnParticles(ParticleTypes.SOUL_FIRE_FLAME, x, y + 1.2, z, 10, 0.6, 0.8, 0.6, 0.04);
-			world.spawnParticles(ParticleTypes.SCULK_SOUL, x, y + 0.5, z, 5, 0.5, 0.5, 0.5, 0.02);
+			world.spawnParticles(ParticleTypes.SOUL_FIRE_FLAME, x, y + 1.2, z, 15, 0.8, 1.0, 0.8, 0.04);
+			world.spawnParticles(ParticleTypes.SCULK_SOUL, x, y + 0.5, z, 8, 0.6, 0.6, 0.6, 0.02);
 		}
 	}
 
-	// ==================== بناء الحلبة الأسطورية الشفافة ====================
+	// ==================== بناء كولوسيوم ضخم 64×64 بـ BARRIER BLOCKS ====================
 
-	private static void buildCustomArena(ServerWorld world, BlockPos center, int radius, int height) {
+	private static void buildColosseumArena(ServerWorld world, BlockPos center, int radius, int height) {
 		for (int x = -radius; x <= radius; x++) {
 			for (int z = -radius; z <= radius; z++) {
 				double distance = Math.sqrt(x * x + z * z);
 
 				if (distance <= radius) {
 					BlockPos floorPos = center.add(x, -1, z);
+
+					// تصميم الأرضية (دائرة احترافية)
 					if (distance > radius - 2) {
 						world.setBlockState(floorPos, Blocks.POLISHED_BLACKSTONE_BRICKS.getDefaultState());
+					} else if (distance < 5) {
+						world.setBlockState(floorPos, Blocks.CRYING_OBSIDIAN.getDefaultState());
 					} else if ((Math.abs(x) + Math.abs(z)) % 2 == 0) {
 						world.setBlockState(floorPos, Blocks.DEEPSLATE_BRICKS.getDefaultState());
 					} else {
 						world.setBlockState(floorPos, Blocks.POLISHED_DEEPSLATE.getDefaultState());
 					}
 
-					if ((Math.abs(x) == 8 && Math.abs(z) == 8) || (Math.abs(x) == 0 && Math.abs(z) == 12) || (Math.abs(x) == 12 && Math.abs(z) == 0)) {
+					// مشاعل طقوس نارية نادرة على الحواف الداخلية
+					if ((Math.abs(x) == 16 && Math.abs(z) == 16) || (Math.abs(x) == 0 && Math.abs(z) == 24) || (Math.abs(x) == 24 && Math.abs(z) == 0)) {
 						world.setBlockState(center.add(x, 0, z), Blocks.SOUL_CAMPFIRE.getDefaultState());
 					}
 				}
 
+				// الجدار الخارجي المكون من BARRIER جبار يمنع الخروج ومفتوح للسماء
 				for (int y = 0; y < height; y++) {
 					BlockPos pos = center.add(x, y, z);
 
@@ -388,7 +415,8 @@ public class NightmareRealms implements ModInitializer {
 						if (y == 0) {
 							world.setBlockState(pos, Blocks.POLISHED_BLACKSTONE_WALL.getDefaultState());
 						} else {
-							world.setBlockState(pos, Blocks.TINTED_GLASS.getDefaultState());
+							// بناء جدار بارير حقيقي مستحيل اختراقه
+							world.setBlockState(pos, Blocks.BARRIER.getDefaultState());
 						}
 					} else if (distance < radius - 1) {
 						world.setBlockState(pos, Blocks.AIR.getDefaultState());
@@ -403,10 +431,11 @@ public class NightmareRealms implements ModInitializer {
 			for (int z = -radius; z <= radius; z++) {
 				for (int y = -1; y <= height; y++) {
 					BlockPos pos = center.add(x, y, z);
-					if (world.getBlockState(pos).isOf(Blocks.TINTED_GLASS) || 
+					if (world.getBlockState(pos).isOf(Blocks.BARRIER) || 
 						world.getBlockState(pos).isOf(Blocks.POLISHED_BLACKSTONE_WALL) || 
 						world.getBlockState(pos).isOf(Blocks.SOUL_CAMPFIRE) || 
 						world.getBlockState(pos).isOf(Blocks.POLISHED_BLACKSTONE_BRICKS) ||
+						world.getBlockState(pos).isOf(Blocks.CRYING_OBSIDIAN) ||
 						world.getBlockState(pos).isOf(Blocks.DEEPSLATE_BRICKS) ||
 						world.getBlockState(pos).isOf(Blocks.POLISHED_DEEPSLATE)) {
 						world.setBlockState(pos, Blocks.AIR.getDefaultState());
