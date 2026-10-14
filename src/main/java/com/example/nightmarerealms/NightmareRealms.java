@@ -120,6 +120,9 @@ public class NightmareRealms implements ModInitializer {
 						.then(CommandManager.literal("start")
 								.requires(source -> true)
 								.executes(NightmareRealms::executeStart))
+						.then(CommandManager.literal("back")
+								.requires(source -> true)
+								.executes(NightmareRealms::executeBack))
 						.then(CommandManager.literal("leave")
 								.requires(source -> true)
 								.executes(NightmareRealms::executeLeave))));
@@ -141,6 +144,20 @@ public class NightmareRealms implements ModInitializer {
 
 		startRealmChallenge(source.getWorld(), player.getBlockPos(), player);
 		return 1;
+	}
+
+	private static int executeBack(com.mojang.brigadier.context.CommandContext<ServerCommandSource> context) {
+		ServerCommandSource source = context.getSource();
+		ServerPlayerEntity player = source.getPlayer();
+
+		if (player != null && currentPhase > 1) {
+			currentPhase = Math.max(1, currentPhase - 1);
+			player.sendMessage(Text.literal("Moved back to Wave " + currentPhase).formatted(Formatting.YELLOW, Formatting.BOLD), false);
+			startNextPhaseActual();
+			return 1;
+		}
+		source.sendError(Text.literal("Cannot go back further or no active challenge."));
+		return 0;
 	}
 
 	private static int executeLeave(com.mojang.brigadier.context.CommandContext<ServerCommandSource> context) {
@@ -252,7 +269,7 @@ public class NightmareRealms implements ModInitializer {
 		}
 	}
 
-	// ==================== BOSSES LOGIC WITH HEALING & ABILITIES ====================
+	// ==================== BOSSES LOGIC WITH TACTICAL ENDERMAN ====================
 
 	private static void startBossEndermanActual() {
 		currentPhase = 4;
@@ -274,11 +291,10 @@ public class NightmareRealms implements ModInitializer {
 		phase1Boss.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(300.0);
 		phase1Boss.setHealth(300.0f);
 		
-		// زيادة سرعة الأندرمان بنسبة 35%
-		phase1Boss.getAttributeInstance(EntityAttributes.MOVEMENT_SPEED).setBaseValue(0.30f * 1.35f);
-		phase1Boss.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 99999, 1, false, false));
-
+		// ضبط سرعة مناسبة (أسرع بنسبة 20% لتكون متوازنة وممتعة)
+		phase1Boss.getAttributeInstance(EntityAttributes.MOVEMENT_SPEED).setBaseValue(0.30f * 1.20f);
 		phase1Boss.setTarget(player);
+
 		world.spawnEntity(phase1Boss);
 	}
 
@@ -298,13 +314,16 @@ public class NightmareRealms implements ModInitializer {
 			healBoss(phase1Boss, 300.0, 0.15);
 		}
 
-		if (tickCounter % 50 == 0 && phase1Boss.getTarget() != null) { // تقليل وقت التلبرت ليتناسب مع السرعة الجديدة
+		// مهارة الأندرمان المخادع (Fake-out & Behind Teleport)
+		if (tickCounter % 70 == 0 && phase1Boss.getTarget() instanceof ServerPlayerEntity player) {
 			ServerWorld world = (ServerWorld) phase1Boss.getEntityWorld();
-			BlockPos targetPos = phase1Boss.getTarget().getBlockPos().add(world.random.nextInt(9) - 4, 0, world.random.nextInt(9) - 4);
-			if (targetPos.getSquaredDistance(arenaCenter) < (ARENA_RADIUS - 4) * (ARENA_RADIUS - 4)) {
-				phase1Boss.teleport(targetPos.getX(), targetPos.getY(), targetPos.getZ(), true);
-				world.spawnParticles(ParticleTypes.PORTAL, phase1Boss.getX(), phase1Boss.getY() + 1, phase1Boss.getZ(), 30, 0.5, 1.0, 0.5, 0.1);
-			}
+			// تلبرت خلف اللاعب مباشرة للتمويه والمباغتة
+			Vec3d playerLook = player.getRotationVec(1.0F).multiply(-2.0); // خلف اللاعب بـ بلوكتين
+			Vec3d backPos = player.getPos().add(playerLook.x, 0, playerLook.z);
+			
+			phase1Boss.teleport(backPos.x, player.getY(), backPos.z, true);
+			world.spawnParticles(ParticleTypes.PORTAL, phase1Boss.getX(), phase1Boss.getY() + 1, phase1Boss.getZ(), 25, 0.3, 1.0, 0.3, 0.1);
+			world.playSound(null, phase1Boss.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_TELEPORT, SoundCategory.HOSTILE, 1.0f, 1.0f);
 		}
 
 		if (tickCounter % 240 == 0 && phase1Boss.getTarget() instanceof ServerPlayerEntity player) {
@@ -498,7 +517,7 @@ public class NightmareRealms implements ModInitializer {
 		}
 	}
 
-	// ==================== LOOT CHEST & DOWNGRADE SYSTEM ====================
+	// ==================== LOOT CHEST & SAFE DEATH / DOWNGRADE ====================
 
 	private static void spawnLootChest(ServerWorld world, BlockPos center, int phase) {
 		BlockPos chestPos = center.add(0, 0, 0);
@@ -543,7 +562,15 @@ public class NightmareRealms implements ModInitializer {
 	private static void handlePlayerDeath(ServerPlayerEntity player) {
 		applyDowngradeToPlayer(player);
 
-		int prevPhase = Math.max(1, currentPhase - 1);
+		// حماية ضد حلقة الموت التكرارية (لو اللاعب في أول مرحلة ومات، بيكتفي بإعادة الجولة 1 بأمان)
+		if (currentPhase <= 1) {
+			currentPhase = 1;
+			player.sendMessage(Text.literal("You died! Restarting Wave 1.").formatted(Formatting.RED, Formatting.BOLD), false);
+			startWave1(player.getServerWorld(), player);
+			return;
+		}
+
+		int prevPhase = currentPhase - 1;
 		currentPhase = prevPhase;
 
 		player.sendMessage(Text.literal("You died! Gear downgraded and moved back 1 Wave.").formatted(Formatting.RED, Formatting.BOLD), false);
@@ -694,7 +721,7 @@ public class NightmareRealms implements ModInitializer {
 		return world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT).getOptional(key).orElse(null);
 	}
 
-	// ==================== GENERATE RANDOM LOOT WITH VANILLA SPEAR ====================
+	// ==================== GENERATE RANDOM LOOT (SPEAR & MACE INCLUDED) ====================
 
 	private static ItemStack generateRandomItem(ServerWorld world, int phase) {
 		int category = random.nextInt(6);
@@ -717,7 +744,7 @@ public class NightmareRealms implements ModInitializer {
 			}
 			case 1 -> {
 				if (random.nextBoolean()) {
-					ItemStack mace = newItemStack(Items.MACE);
+					ItemStack mace = new ItemStack(Items.MACE);
 					if (density != null) mace.addEnchantment(density, 1 + random.nextInt(4));
 					if (unbreaking != null) mace.addEnchantment(unbreaking, 2);
 					return mace;
@@ -754,9 +781,5 @@ public class NightmareRealms implements ModInitializer {
 				return new ItemStack(Items.DIAMOND, 3 + random.nextInt(5));
 			}
 		}
-	}
-
-	private static ItemStack newItemStack(Item item) {
-		return new ItemStack(item);
 	}
 }
