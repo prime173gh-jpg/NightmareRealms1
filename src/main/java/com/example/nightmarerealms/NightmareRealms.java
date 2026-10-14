@@ -55,12 +55,8 @@ public class NightmareRealms implements ModInitializer {
 
 	public static final String MOD_ID = "nightmarerealms";
 
-	// تسجيل الـ Custom Spear المخصص للمود لتجنب مشاكل الـ Mappings
-	public static final Item CUSTOM_SPEAR = Registry.register(
-			Registries.ITEM,
-			Identifier.of(MOD_ID, "spear"),
-			new Item(new Item.Settings().maxDamage(500))
-	);
+	public static final RegistryKey<Item> SPEAR_KEY = RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, "spear"));
+	public static Item CUSTOM_SPEAR;
 
 	private static ServerBossBar bossBar;
 	private static int currentPhase = 0; // 1..3 Waves, 4..7 Bosses
@@ -80,6 +76,13 @@ public class NightmareRealms implements ModInitializer {
 
 	@Override
 	public void onInitialize() {
+		// تسجيل السلاح المخصص بأمان داخل onInitialize لمنع الـ Crash
+		CUSTOM_SPEAR = Registry.register(
+				Registries.ITEM,
+				SPEAR_KEY,
+				new Item(new Item.Settings().registryKey(SPEAR_KEY).maxDamage(500))
+		);
+
 		bossBar = new ServerBossBar(
 				Text.literal("Nightmare Realm").formatted(Formatting.DARK_PURPLE, Formatting.BOLD),
 				BossBar.Color.PURPLE,
@@ -298,12 +301,10 @@ public class NightmareRealms implements ModInitializer {
 		spawnBossAura((ServerWorld) phase1Boss.getEntityWorld(), phase1Boss.getX(), phase1Boss.getY(), phase1Boss.getZ(), 1);
 		bossBar.setPercent(phase1Boss.getHealth() / phase1Boss.getMaxHealth());
 
-		// Self-Heal للبوس الأول
 		if (tickCounter % 260 == 0) {
 			healBoss(phase1Boss, 300.0, 0.15);
 		}
 
-		// مهارة التلبرت لللاعب
 		if (tickCounter % 60 == 0 && phase1Boss.getTarget() != null) {
 			ServerWorld world = (ServerWorld) phase1Boss.getEntityWorld();
 			BlockPos targetPos = phase1Boss.getTarget().getBlockPos().add(world.random.nextInt(9) - 4, 0, world.random.nextInt(9) - 4);
@@ -313,7 +314,6 @@ public class NightmareRealms implements ModInitializer {
 			}
 		}
 
-		// مهارة Shadow Blast
 		if (tickCounter % 240 == 0 && phase1Boss.getTarget() instanceof ServerPlayerEntity player) {
 			ServerWorld world = (ServerWorld) phase1Boss.getEntityWorld();
 			player.damage(world, world.getDamageSources().magic(), 12.0f);
@@ -363,12 +363,10 @@ public class NightmareRealms implements ModInitializer {
 		spawnBossAura((ServerWorld) phase2Boss.getEntityWorld(), phase2Boss.getX(), phase2Boss.getY(), phase2Boss.getZ(), 2);
 		bossBar.setPercent(phase2Boss.getHealth() / phase2Boss.getMaxHealth());
 
-		// Self-Heal للبوس الثاني
 		if (tickCounter % 260 == 0) {
 			healBoss(phase2Boss, 450.0, 0.15);
 		}
 
-		// مهارة Fireball
 		if (tickCounter % 80 == 0 && phase2Boss.getTarget() != null) {
 			ServerWorld world = (ServerWorld) phase2Boss.getEntityWorld();
 			Vec3d lookVec = phase2Boss.getRotationVec(1.0F);
@@ -377,7 +375,6 @@ public class NightmareRealms implements ModInitializer {
 			world.spawnEntity(fireball);
 		}
 
-		// مهارة استدعاء المينيونز
 		if (tickCounter % 200 == 0) {
 			ServerWorld world = (ServerWorld) phase2Boss.getEntityWorld();
 			for (int i = 0; i < 2; i++) {
@@ -429,12 +426,10 @@ public class NightmareRealms implements ModInitializer {
 		spawnBossAura((ServerWorld) ironTitanBoss.getEntityWorld(), ironTitanBoss.getX(), ironTitanBoss.getY(), ironTitanBoss.getZ(), 2);
 		bossBar.setPercent(ironTitanBoss.getHealth() / ironTitanBoss.getMaxHealth());
 
-		// Self-Heal للجولم
 		if (tickCounter % 260 == 0) {
 			healBoss(ironTitanBoss, 600.0, 0.15);
 		}
 
-		// مهارة الضربة الزلزالية Earthquake Slam
 		if (tickCounter % 160 == 0 && ironTitanBoss.getTarget() instanceof ServerPlayerEntity player) {
 			ServerWorld world = (ServerWorld) ironTitanBoss.getEntityWorld();
 			player.damage(world, world.getDamageSources().generic(), 14.0f);
@@ -488,7 +483,6 @@ public class NightmareRealms implements ModInitializer {
 
 		ServerWorld world = (ServerWorld) phase3Boss.getEntityWorld();
 
-		// Self-Heal للبيج بوس
 		if (tickCounter % 260 == 0) {
 			healBoss(phase3Boss, 350.0, 0.15);
 		}
@@ -496,14 +490,12 @@ public class NightmareRealms implements ModInitializer {
 		if (!bossBar.getPlayers().isEmpty()) {
 			ServerPlayerEntity player = bossBar.getPlayers().iterator().next();
 
-			// مهارة Wither Strike
 			if (tickCounter % 200 == 0) {
 				player.damage(world, world.getDamageSources().wither(), 12.0f);
 				player.addStatusEffect(new StatusEffectInstance(StatusEffects.WITHER, 100, 1));
 				player.sendMessage(Text.literal("Wither Death Strike hit you!").formatted(Formatting.DARK_GRAY, Formatting.BOLD), true);
 			}
 
-			// مهارة Lightning Bolt
 			if (tickCounter % 300 == 0) {
 				LightningEntity lightning = new LightningEntity(EntityType.LIGHTNING_BOLT, world);
 				lightning.refreshPositionAfterTeleport(player.getX(), player.getY(), player.getZ());
@@ -736,7 +728,6 @@ public class NightmareRealms implements ModInitializer {
 					if (unbreaking != null) mace.addEnchantment(unbreaking, 2);
 					return mace;
 				} else {
-					// إنشاء الـ Custom Spear المخصص مع اسمه الأسطوري
 					ItemStack spearStack = new ItemStack(CUSTOM_SPEAR);
 					spearStack.set(DataComponentTypes.CUSTOM_NAME, Text.literal("⚡ Nightmare Spear ⚡").formatted(Formatting.AQUA, Formatting.BOLD));
 					if (sharpness != null) spearStack.addEnchantment(sharpness, 3 + random.nextInt(2));
