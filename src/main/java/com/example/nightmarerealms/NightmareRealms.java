@@ -313,7 +313,7 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setColor(BossBar.Color.YELLOW);
 
 		player.requestTeleport(arenaCenter.getX() + 15.5, arenaCenter.getY() + 1.0, arenaCenter.getZ() + 0.5);
-		buildColosseumArena(world, arenaCenter, ARENA_RADIUS, ARENA_HEIGHT, 4); // Iron/Ancient Temple Theme
+		buildColosseumArena(world, arenaCenter, ARENA_RADIUS, ARENA_HEIGHT, 4);
 
 		showCinematicIntro(player, "🛡️ IRON TITAN 🛡️", "Unstoppable Ancient Defender!", Formatting.GOLD);
 		playEntranceEffects(world, arenaCenter, 2);
@@ -344,7 +344,6 @@ public class NightmareRealms implements ModInitializer {
 		spawnBossAura((ServerWorld) ironTitanBoss.getEntityWorld(), ironTitanBoss.getX(), ironTitanBoss.getY(), ironTitanBoss.getZ(), 2);
 		bossBar.setPercent(ironTitanBoss.getHealth() / ironTitanBoss.getMaxHealth());
 
-		// هزة أرضية وضربة زلزال لللاعبين كل بضعة ثواني
 		if (tickCounter % 160 == 0 && ironTitanBoss.getTarget() instanceof ServerPlayerEntity player) {
 			ServerWorld world = (ServerWorld) ironTitanBoss.getEntityWorld();
 			player.damage(world, world.getDamageSources().generic(), 14.0f);
@@ -363,7 +362,7 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setColor(BossBar.Color.WHITE);
 
 		player.requestTeleport(arenaCenter.getX() + 15.5, arenaCenter.getY() + 1.0, arenaCenter.getZ() + 0.5);
-		buildColosseumArena(world, arenaCenter, ARENA_RADIUS, ARENA_HEIGHT, 5); // Soul Death Theme
+		buildColosseumArena(world, arenaCenter, ARENA_RADIUS, ARENA_HEIGHT, 5);
 
 		showCinematicIntro(player, "☠️ NIGHTMARE WITHER ☠️", "THE BIG BOSS: FACE ABSOLUTE DEATH!", Formatting.DARK_GRAY);
 		playEntranceEffects(world, arenaCenter, 3);
@@ -488,7 +487,7 @@ public class NightmareRealms implements ModInitializer {
 					} else if (theme == 3) { // Nether Skeleton
 						world.setBlockState(floorPos, (Math.abs(x) + Math.abs(z)) % 2 == 0 ? Blocks.NETHER_BRICKS.getDefaultState() : Blocks.MAGMA_BLOCK.getDefaultState());
 					} else if (theme == 4) { // Iron Titan
-						world.setBlockState(floorPos, (Math.abs(x) + Math.abs(z)) % 2 == 0 ? Blocks.MOSSY_DEEPSLATE_BRICKS.getDefaultState() : Blocks.COPPER_BLOCK.getDefaultState());
+						world.setBlockState(floorPos, (Math.abs(x) + Math.abs(z)) % 2 == 0 ? Blocks.CRACKED_DEEPSLATE_BRICKS.getDefaultState() : Blocks.COPPER_BLOCK.getDefaultState());
 					} else { // Big Boss Wither
 						world.setBlockState(floorPos, (Math.abs(x) + Math.abs(z)) % 2 == 0 ? Blocks.SCULK.getDefaultState() : Blocks.SOUL_SOIL.getDefaultState());
 					}
@@ -520,7 +519,7 @@ public class NightmareRealms implements ModInitializer {
 						world.getBlockState(pos).isOf(Blocks.SCULK) ||
 						world.getBlockState(pos).isOf(Blocks.SOUL_SOIL) ||
 						world.getBlockState(pos).isOf(Blocks.COPPER_BLOCK) ||
-						world.getBlockState(pos).isOf(Blocks.MOSSY_DEEPSLATE_BRICKS) ||
+						world.getBlockState(pos).isOf(Blocks.CRACKED_DEEPSLATE_BRICKS) ||
 						world.getBlockState(pos).isOf(Blocks.CRYING_OBSIDIAN) ||
 						world.getBlockState(pos).isOf(Blocks.POLISHED_DEEPSLATE)) {
 						world.setBlockState(pos, Blocks.AIR.getDefaultState());
@@ -538,7 +537,6 @@ public class NightmareRealms implements ModInitializer {
 		ItemStack specialReward = ItemStack.EMPTY;
 		RegistryEntry<Enchantment> sharpness = getEnchantment(world, Enchantments.SHARPNESS);
 		RegistryEntry<Enchantment> protection = getEnchantment(world, Enchantments.PROTECTION);
-		RegistryEntry<Enchantment> unbreaking = getEnchantment(world, Enchantments.UNBREAKING);
 
 		if (phase == 4) {
 			specialReward = new ItemStack(Items.NETHERITE_CHESTPLATE);
@@ -575,10 +573,8 @@ public class NightmareRealms implements ModInitializer {
 		int category = random.nextInt(4);
 
 		RegistryEntry<Enchantment> sharpness = getEnchantment(world, Enchantments.SHARPNESS);
-		RegistryEntry<Enchantment> power = getEnchantment(world, Enchantments.POWER);
 		RegistryEntry<Enchantment> unbreaking = getEnchantment(world, Enchantments.UNBREAKING);
 		RegistryEntry<Enchantment> protection = getEnchantment(world, Enchantments.PROTECTION);
-		RegistryEntry<Enchantment> mending = getEnchantment(world, Enchantments.MENDING);
 
 		boolean isNetheriteAllowed = (phase >= 4) && random.nextBoolean();
 
