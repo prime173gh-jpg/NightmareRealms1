@@ -60,7 +60,6 @@ public class NightmareRealms implements ModInitializer {
 	private static WitherSkeletonEntity phase2Boss;
 	private static WitherEntity phase3Boss;
 
-	// حلبة ضخمة 64×64 (نصف القطر 32)
 	private static final int ARENA_RADIUS = 32;
 	private static final int ARENA_HEIGHT = 12;
 
@@ -88,15 +87,12 @@ public class NightmareRealms implements ModInitializer {
 				return;
 			}
 
-			if (currentPhase == 1 && phase1Boss != null && phase1Boss.isAlive()) {
+			if (currentPhase == 1) {
 				updatePhase1();
-				spawnBossAura((ServerWorld) phase1Boss.getEntityWorld(), phase1Boss.getX(), phase1Boss.getY(), phase1Boss.getZ(), 1);
-			} else if (currentPhase == 2 && phase2Boss != null && phase2Boss.isAlive()) {
+			} else if (currentPhase == 2) {
 				updatePhase2();
-				spawnBossAura((ServerWorld) phase2Boss.getEntityWorld(), phase2Boss.getX(), phase2Boss.getY(), phase2Boss.getZ(), 2);
-			} else if (currentPhase == 3 && phase3Boss != null && phase3Boss.isAlive()) {
+			} else if (currentPhase == 3) {
 				updatePhase3();
-				spawnBossAura((ServerWorld) phase3Boss.getEntityWorld(), phase3Boss.getX(), phase3Boss.getY(), phase3Boss.getZ(), 3);
 			}
 		});
 
@@ -133,13 +129,10 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setColor(BossBar.Color.PURPLE);
 		bossBar.setVisible(true);
 
-		// نقل اللاعب بعيداً عن السنتر بـ 15 بلوكة حتى لا يرسبن فوق البوس
 		player.requestTeleport(pos.getX() + 15.5, pos.getY() + 1.0, pos.getZ() + 0.5);
 
-		// بناء الحلبة وتحديد ديكور Phase 1
 		buildColosseumArena(world, pos, ARENA_RADIUS, ARENA_HEIGHT, 1);
 
-		// انترو سينمائي ملحمي
 		showCinematicIntro(player, "⚡ SHADOW SOVEREIGN ⚡", "Phase I: The Darkness Awakens", Formatting.DARK_PURPLE);
 		playEntranceEffects(world, pos, 1);
 
@@ -156,11 +149,16 @@ public class NightmareRealms implements ModInitializer {
 	}
 
 	private static void updatePhase1() {
-		if (!phase1Boss.isAlive()) {
-			dropRandomizedLoot((ServerWorld) phase1Boss.getEntityWorld(), phase1Boss.getBlockPos(), 1);
+		if (phase1Boss == null || !phase1Boss.isAlive() || phase1Boss.isRemoved()) {
+			ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
+			BlockPos dropPos = phase1Boss != null ? phase1Boss.getBlockPos() : arenaCenter;
+			dropRandomizedLoot(world, dropPos, 1);
+			phase1Boss = null;
 			startCooldown(1);
 			return;
 		}
+
+		spawnBossAura((ServerWorld) phase1Boss.getEntityWorld(), phase1Boss.getX(), phase1Boss.getY(), phase1Boss.getZ(), 1);
 		bossBar.setPercent(phase1Boss.getHealth() / phase1Boss.getMaxHealth());
 
 		if (phase1Boss.getBlockPos().getSquaredDistance(arenaCenter) > (ARENA_RADIUS - 3) * (ARENA_RADIUS - 3)) {
@@ -191,7 +189,7 @@ public class NightmareRealms implements ModInitializer {
 
 	private static void startCooldown(int completedPhase) {
 		currentPhase = completedPhase;
-		cooldownTimer = 200;
+		cooldownTimer = 200; // 10 ثواني
 		bossBar.setPercent(1.0f);
 	}
 
@@ -225,11 +223,16 @@ public class NightmareRealms implements ModInitializer {
 	}
 
 	private static void updatePhase2() {
-		if (!phase2Boss.isAlive()) {
-			dropRandomizedLoot((ServerWorld) phase2Boss.getEntityWorld(), phase2Boss.getBlockPos(), 2);
+		if (phase2Boss == null || !phase2Boss.isAlive() || phase2Boss.isRemoved()) {
+			ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
+			BlockPos dropPos = phase2Boss != null ? phase2Boss.getBlockPos() : arenaCenter;
+			dropRandomizedLoot(world, dropPos, 2);
+			phase2Boss = null;
 			startCooldown(2);
 			return;
 		}
+
+		spawnBossAura((ServerWorld) phase2Boss.getEntityWorld(), phase2Boss.getX(), phase2Boss.getY(), phase2Boss.getZ(), 2);
 		bossBar.setPercent(phase2Boss.getHealth() / phase2Boss.getMaxHealth());
 
 		if (tickCounter % 260 == 0) {
@@ -285,10 +288,11 @@ public class NightmareRealms implements ModInitializer {
 	}
 
 	private static void updatePhase3() {
-		if (!phase3Boss.isAlive()) {
-			ServerWorld world = (ServerWorld) phase3Boss.getEntityWorld();
+		if (phase3Boss == null || !phase3Boss.isAlive() || phase3Boss.isRemoved()) {
+			ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
+			BlockPos dropPos = phase3Boss != null ? phase3Boss.getBlockPos() : arenaCenter;
 
-			dropRandomizedLoot(world, phase3Boss.getBlockPos(), 3);
+			dropRandomizedLoot(world, dropPos, 3);
 			clearArena(world, arenaCenter, ARENA_RADIUS, ARENA_HEIGHT);
 
 			currentPhase = 0;
@@ -297,6 +301,8 @@ public class NightmareRealms implements ModInitializer {
 			phase3Boss = null;
 			return;
 		}
+
+		spawnBossAura((ServerWorld) phase3Boss.getEntityWorld(), phase3Boss.getX(), phase3Boss.getY(), phase3Boss.getZ(), 3);
 		bossBar.setPercent(phase3Boss.getHealth() / phase3Boss.getMaxHealth());
 
 		ServerWorld world = (ServerWorld) phase3Boss.getEntityWorld();
@@ -491,14 +497,14 @@ public class NightmareRealms implements ModInitializer {
 		}
 
 		if (!specialReward.isEmpty()) {
-			world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), specialReward));
+			world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY() + 1.0, pos.getZ(), specialReward));
 		}
 
 		int numberOfItems = 3 + random.nextInt(phase + 2);
 		for (int i = 0; i < numberOfItems; i++) {
 			ItemStack lootItem = generateRandomItem(world, phase);
 			if (!lootItem.isEmpty()) {
-				world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), lootItem));
+				world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY() + 1.0, pos.getZ(), lootItem));
 			}
 		}
 	}
