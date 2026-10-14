@@ -150,13 +150,12 @@ public class NightmareRealms implements ModInitializer {
 		ServerCommandSource source = context.getSource();
 		ServerPlayerEntity player = source.getPlayer();
 
-		if (player != null && currentPhase > 1) {
-			currentPhase = Math.max(1, currentPhase - 1);
-			player.sendMessage(Text.literal("Moved back to Wave " + currentPhase).formatted(Formatting.YELLOW, Formatting.BOLD), false);
+		if (player != null && currentPhase >= 1) {
+			player.sendMessage(Text.literal("Resuming Challenge at Wave " + currentPhase).formatted(Formatting.YELLOW, Formatting.BOLD), false);
 			startNextPhaseActual();
 			return 1;
 		}
-		source.sendError(Text.literal("Cannot go back further or no active challenge."));
+		source.sendError(Text.literal("No active challenge to resume. Use /nightmarerealms start"));
 		return 0;
 	}
 
@@ -313,7 +312,6 @@ public class NightmareRealms implements ModInitializer {
 			healBoss(phase1Boss, 300.0, 0.15);
 		}
 
-		// مهارة التمويه والتلبرت خلف اللاعب باستخدام الإحداثيات المباشرة لضمان التوافق التام
 		if (tickCounter % 70 == 0 && phase1Boss.getTarget() instanceof ServerPlayerEntity player) {
 			ServerWorld world = (ServerWorld) phase1Boss.getEntityWorld();
 			Vec3d playerLook = player.getRotationVec(1.0F).multiply(-2.0);
@@ -560,18 +558,29 @@ public class NightmareRealms implements ModInitializer {
 	private static void handlePlayerDeath(ServerPlayerEntity player) {
 		applyDowngradeToPlayer(player);
 
+		// تنظيف تام للموبز القديمة لمنع التكرار والتعليق (Lag/Freeze)
+		for (net.minecraft.entity.mob.MobEntity mob : currentWaveMobs) {
+			if (mob != null && mob.isAlive()) {
+				mob.discard();
+			}
+		}
+		currentWaveMobs.clear();
+
+		if (phase1Boss != null) { phase1Boss.discard(); phase1Boss = null; }
+		if (phase2Boss != null) { phase2Boss.discard(); phase2Boss = null; }
+		if (ironTitanBoss != null) { ironTitanBoss.discard(); ironTitanBoss = null; }
+		if (phase3Boss != null) { phase3Boss.discard(); phase3Boss = null; }
+
+		// رجوع آمن لمرحلة سابقة بدون تكرار لاانهائي
 		if (currentPhase <= 1) {
 			currentPhase = 1;
-			player.sendMessage(Text.literal("You died! Restarting Wave 1.").formatted(Formatting.RED, Formatting.BOLD), false);
-			startWave1((ServerWorld) player.getEntityWorld(), player); // استخدام الإحداثيات والعالم الصحيح
-			return;
+		} else {
+			currentPhase = currentPhase - 1;
 		}
 
-		int prevPhase = currentPhase - 1;
-		currentPhase = prevPhase;
-
-		player.sendMessage(Text.literal("You died! Gear downgraded and moved back 1 Wave.").formatted(Formatting.RED, Formatting.BOLD), false);
-		startCooldown(prevPhase, 200);
+		cooldownTimer = 100; // وقفة مؤقتة أمان 5 ثواني قبل السماح بالاستمرار
+		bossBar.setName(Text.literal("You Died! Use /nightmarerealms back to retry").formatted(Formatting.RED, Formatting.BOLD));
+		player.sendMessage(Text.literal("You died! Challenge paused. Type /nightmarerealms back to resume.").formatted(Formatting.RED, Formatting.BOLD), false);
 	}
 
 	private static void applyDowngradeToPlayer(ServerPlayerEntity player) {
@@ -607,7 +616,8 @@ public class NightmareRealms implements ModInitializer {
 		ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
 		ServerPlayerEntity player = bossBar.getPlayers().iterator().next();
 
-		if (currentPhase == 2) startWave2(world, player);
+		if (currentPhase == 1) startWave1(world, player);
+		else if (currentPhase == 2) startWave2(world, player);
 		else if (currentPhase == 3) startWave3(world, player);
 		else if (currentPhase == 4) startBossEndermanActual();
 		else if (currentPhase == 5) startBossWitherSkeletonActual();
@@ -701,6 +711,7 @@ public class NightmareRealms implements ModInitializer {
 						world.getBlockState(pos).isOf(Blocks.NETHER_BRICKS) ||
 						world.getBlockState(pos).isOf(Blocks.MAGMA_BLOCK) ||
 						world.getBlockState(pos).isOf(Blocks.SCULK) ||
+						world.getBlockState(pos).isOf(Boxes -> false) || // safety cast reference
 						world.getBlockState(pos).isOf(Blocks.SOUL_SOIL) ||
 						world.getBlockState(pos).isOf(Blocks.COPPER_BLOCK) ||
 						world.getBlockState(pos).isOf(Blocks.CRACKED_DEEPSLATE_BRICKS) ||
@@ -718,12 +729,14 @@ public class NightmareRealms implements ModInitializer {
 		return world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT).getOptional(key).orElse(null);
 	}
 
-	// ==================== GENERATE RANDOM LOOT WITH MODDED SPEAR ====================
+	// ==================== GENERATE RANDOM LOOT (AXE, PICKAXE & SPEAR INCLUDED) ====================
 
 	private static ItemStack generateRandomItem(ServerWorld world, int phase) {
-		int category = random.nextInt(6);
+		int category = random.nextInt(8); // توسيع التصنيفات لتشمل الفأس والكاشطة (Pickaxe / Axe)
 
 		RegistryEntry<Enchantment> sharpness = getEnchantment(world, Enchantments.SHARPNESS);
+		RegistryEntry<Enchantment> efficiency = getEnchantment(world, Enchantments.EFFICIENCY);
+		RegistryEntry<Enchantment> fortune = getEnchantment(world, Enchantments.FORTUNE);
 		RegistryEntry<Enchantment> density = getEnchantment(world, Enchantments.DENSITY);
 		RegistryEntry<Enchantment> lunge = getEnchantment(world, RegistryKey.of(RegistryKeys.ENCHANTMENT, Identifier.of("minecraft", "lunge")));
 		RegistryEntry<Enchantment> unbreaking = getEnchantment(world, Enchantments.UNBREAKING);
@@ -762,12 +775,29 @@ public class NightmareRealms implements ModInitializer {
 				}
 			}
 			case 2 -> {
+				// إضافة Pickaxe (مع إحتمالية نذرايت أو داياموند وحظ / كفاءة)
+				Item pickItem = isNetheriteAllowed ? Items.NETHERITE_PICKAXE : Items.DIAMOND_PICKAXE;
+				ItemStack pickaxe = new ItemStack(pickItem);
+				if (efficiency != null) pickaxe.addEnchantment(efficiency, 3 + random.nextInt(3));
+				if (fortune != null && random.nextBoolean()) pickaxe.addEnchantment(fortune, 2 + random.nextInt(2));
+				if (unbreaking != null) pickaxe.addEnchantment(unbreaking, 2);
+				return pickaxe;
+			}
+			case 3 -> {
+				// إضافة Axe (فأس قتالي / خشبي)
+				Item axeItem = isNetheriteAllowed ? Items.NETHERITE_AXE : Items.DIAMOND_AXE;
+				ItemStack axe = new ItemStack(axeItem);
+				if (sharpness != null) axe.addEnchantment(sharpness, 3 + random.nextInt(2));
+				if (unbreaking != null) axe.addEnchantment(unbreaking, 2);
+				return axe;
+			}
+			case 4 -> {
 				Item armorItem = isNetheriteAllowed ? Items.NETHERITE_CHESTPLATE : Items.DIAMOND_CHESTPLATE;
 				ItemStack armor = new ItemStack(armorItem);
 				if (protection != null) armor.addEnchantment(protection, 2 + random.nextInt(3));
 				return armor;
 			}
-			case 3 -> {
+			case 5 -> {
 				Item lowerArmor = random.nextBoolean() ? 
 						(isNetheriteAllowed ? Items.NETHERITE_LEGGINGS : Items.DIAMOND_LEGGINGS) : 
 						(isNetheriteAllowed ? Items.NETHERITE_BOOTS : Items.DIAMOND_BOOTS);
@@ -775,7 +805,7 @@ public class NightmareRealms implements ModInitializer {
 				if (protection != null) armor.addEnchantment(protection, 2 + random.nextInt(3));
 				return armor;
 			}
-			case 4 -> {
+			case 6 -> {
 				return new ItemStack(Items.GOLDEN_APPLE, 2 + random.nextInt(4));
 			}
 			default -> {
