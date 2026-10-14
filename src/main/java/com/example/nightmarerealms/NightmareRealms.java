@@ -4,12 +4,12 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.block.Blocks;
+import net.minecraft.block.entity.ChestBlockEntity;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.enchantment.Enchantment;
 import net.minecraft.enchantment.Enchantments;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.LightningEntity;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.boss.BossBar;
@@ -53,7 +53,7 @@ public class NightmareRealms implements ModInitializer {
 	public static final String MOD_ID = "nightmarerealms";
 
 	private static ServerBossBar bossBar;
-	private static int currentPhase = 0; // 1..3 Mobs, 4..7 Bosses
+	private static int currentPhase = 0; // 1..3 Waves, 4..7 Bosses
 	private static int tickCounter = 0;
 	private static int cooldownTimer = 0;
 	private static BlockPos arenaCenter;
@@ -92,6 +92,15 @@ public class NightmareRealms implements ModInitializer {
 				return;
 			}
 
+			// فحص حالة موت اللاعب وإرجاعه جولة للخلف مع Downgrade
+			if (currentPhase > 0 && !bossBar.getPlayers().isEmpty()) {
+				ServerPlayerEntity player = bossBar.getPlayers().iterator().next();
+				if (player.isDead() || player.getHealth() <= 0) {
+					handlePlayerDeath(player);
+					return;
+				}
+			}
+
 			if (currentPhase >= 1 && currentPhase <= 3) {
 				updateNormalMobWave();
 			} else if (currentPhase == 4) {
@@ -109,7 +118,10 @@ public class NightmareRealms implements ModInitializer {
 				dispatcher.register(CommandManager.literal("nightmarerealms")
 						.then(CommandManager.literal("start")
 								.requires(source -> true)
-								.executes(NightmareRealms::executeStart))));
+								.executes(NightmareRealms::executeStart))
+						.then(CommandManager.literal("leave")
+								.requires(source -> true)
+								.executes(NightmareRealms::executeLeave))));
 	}
 
 	private static int executeStart(com.mojang.brigadier.context.CommandContext<ServerCommandSource> context) {
@@ -130,6 +142,22 @@ public class NightmareRealms implements ModInitializer {
 		return 1;
 	}
 
+	private static int executeLeave(com.mojang.brigadier.context.CommandContext<ServerCommandSource> context) {
+		ServerCommandSource source = context.getSource();
+		ServerPlayerEntity player = source.getPlayer();
+
+		if (player != null && currentPhase > 0) {
+			ServerWorld world = source.getWorld();
+			applyDowngradeToPlayer(player);
+			clearArena(world, arenaCenter, ARENA_RADIUS, ARENA_HEIGHT);
+			resetChallengeState();
+			player.sendMessage(Text.literal("You left the Nightmare Realm and suffered gear degradation!").formatted(Formatting.RED, Formatting.BOLD), false);
+			return 1;
+		}
+		source.sendError(Text.literal("No active Nightmare Realm challenge to leave."));
+		return 0;
+	}
+
 	public static void startRealmChallenge(ServerWorld world, BlockPos pos, ServerPlayerEntity player) {
 		currentPhase = 1;
 		arenaCenter = pos;
@@ -143,6 +171,7 @@ public class NightmareRealms implements ModInitializer {
 	// ==================== WAVES LOGIC ====================
 
 	private static void startWave1(ServerWorld world, ServerPlayerEntity player) {
+		removeLootChest(world, arenaCenter);
 		buildColosseumArena(world, arenaCenter, ARENA_RADIUS, ARENA_HEIGHT, 1);
 		showCinematicIntro(player, "⚔️ WAVE 1: ZOMBIE HORDE ⚔️", "Survive the Enraged Swarm!", Formatting.GREEN);
 
@@ -153,20 +182,18 @@ public class NightmareRealms implements ModInitializer {
 		for (int i = 0; i < 6; i++) {
 			ZombieEntity zombie = new ZombieEntity(world);
 			zombie.refreshPositionAndAngles(arenaCenter.getX() + random.nextInt(10) - 5, arenaCenter.getY() + 1, arenaCenter.getZ() + random.nextInt(10) - 5, 0, 0);
-			
-			// خوذة لمنع الحرق من الشمس
 			zombie.equipStack(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
 			zombie.equipStack(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
 			zombie.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 99999, 1));
 			zombie.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH, 99999, 1));
-			zombie.setCustomName(Text.literal("Berserk Zombie").formatted(Formatting.DARK_GREEN));
-			zombie.setCustomNameVisible(true);
+			zombie.setTarget(player);
 			world.spawnEntity(zombie);
 			currentWaveMobs.add(zombie);
 		}
 	}
 
 	private static void startWave2(ServerWorld world, ServerPlayerEntity player) {
+		removeLootChest(world, arenaCenter);
 		buildColosseumArena(world, arenaCenter, ARENA_RADIUS, ARENA_HEIGHT, 1);
 		showCinematicIntro(player, "🏹 WAVE 2: SKELETON SNIPERS 🏹", "Watch Out for Deadly Arrows!", Formatting.GOLD);
 
@@ -174,32 +201,28 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setColor(BossBar.Color.YELLOW);
 
 		RegistryEntry<Enchantment> power = getEnchantment(world, Enchantments.POWER);
-		RegistryEntry<Enchantment> punch = getEnchantment(world, Enchantments.PUNCH);
 
 		currentWaveMobs.clear();
 		for (int i = 0; i < 6; i++) {
 			SkeletonEntity skeleton = new SkeletonEntity(EntityType.SKELETON, world);
 			skeleton.refreshPositionAndAngles(arenaCenter.getX() + random.nextInt(12) - 6, arenaCenter.getY() + 1, arenaCenter.getZ() + random.nextInt(12) - 6, 0, 0);
 			
-			// تجهيز القوس والخوذة المانعة للشمس
 			ItemStack bow = new ItemStack(Items.BOW);
 			if (power != null) bow.addEnchantment(power, 3);
-			if (punch != null) bow.addEnchantment(punch, 2);
 			skeleton.equipStack(EquipmentSlot.MAINHAND, bow);
 			skeleton.equipStack(EquipmentSlot.HEAD, new ItemStack(Items.CHAINMAIL_HELMET));
 
-			skeleton.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, 99999, 1));
 			skeleton.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 99999, 1));
-			skeleton.setCustomName(Text.literal("Armored Sniper").formatted(Formatting.GOLD));
-			skeleton.setCustomNameVisible(true);
+			skeleton.setTarget(player);
 			world.spawnEntity(skeleton);
 			currentWaveMobs.add(skeleton);
 		}
 	}
 
 	private static void startWave3(ServerWorld world, ServerPlayerEntity player) {
+		removeLootChest(world, arenaCenter);
 		buildColosseumArena(world, arenaCenter, ARENA_RADIUS, ARENA_HEIGHT, 1);
-		showCinematicIntro(player, "🕷️ WAVE 3: SHADOW ARACHNIDS 🕷️", "Final Mob Wave Before The Bosses!", Formatting.RED);
+		showCinematicIntro(player, "🕷️ WAVE 3: SHADOW ARACHNIDS 🕷️", "Aggressive Venomous Hunters!", Formatting.RED);
 
 		bossBar.setName(Text.literal("Wave 3/7 - Venomous Arachnids").formatted(Formatting.RED, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.RED);
@@ -210,25 +233,21 @@ public class NightmareRealms implements ModInitializer {
 			spider.refreshPositionAndAngles(arenaCenter.getX() + random.nextInt(12) - 6, arenaCenter.getY() + 1, arenaCenter.getZ() + random.nextInt(12) - 6, 0, 0);
 			spider.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH, 99999, 1));
 			spider.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 99999, 1));
-			spider.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION, 99999, 1));
-			spider.setCustomName(Text.literal("Venomous Stalker").formatted(Formatting.DARK_RED));
-			spider.setCustomNameVisible(true);
+			spider.setTarget(player);
 			world.spawnEntity(spider);
 			currentWaveMobs.add(spider);
 		}
 	}
 
 	private static void updateNormalMobWave() {
-		// تنظيف القائمة من الموبز الميتة فوراً
 		currentWaveMobs.removeIf(mob -> mob == null || !mob.isAlive() || mob.isRemoved());
 		float remainingPercent = (float) currentWaveMobs.size() / 6.0f;
 		bossBar.setPercent(Math.max(0.0f, remainingPercent));
 
 		if (currentWaveMobs.isEmpty()) {
 			ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
-			dropRandomizedLoot(world, arenaCenter, currentPhase);
-			int nextPhase = currentPhase + 1;
-			startCooldown(nextPhase, 300); // 15 ثواني
+			spawnLootChest(world, arenaCenter, currentPhase);
+			startCooldown(currentPhase + 1, 300); // 15 ثانية راحة
 		}
 	}
 
@@ -239,6 +258,7 @@ public class NightmareRealms implements ModInitializer {
 		ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
 		ServerPlayerEntity player = bossBar.getPlayers().iterator().next();
 
+		removeLootChest(world, arenaCenter);
 		bossBar.setName(Text.literal("Shadow Sovereign - Phase IV").formatted(Formatting.DARK_PURPLE, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.PURPLE);
 
@@ -252,8 +272,7 @@ public class NightmareRealms implements ModInitializer {
 		phase1Boss.refreshPositionAndAngles(arenaCenter.getX() + 0.5, arenaCenter.getY() + 1, arenaCenter.getZ() + 0.5, 0, 0);
 		phase1Boss.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(300.0);
 		phase1Boss.setHealth(300.0f);
-		phase1Boss.setCustomName(Text.literal("⚡ SHADOW SOVEREIGN ⚡").formatted(Formatting.DARK_PURPLE, Formatting.BOLD));
-		phase1Boss.setCustomNameVisible(true);
+		phase1Boss.setTarget(player);
 
 		world.spawnEntity(phase1Boss);
 	}
@@ -261,9 +280,9 @@ public class NightmareRealms implements ModInitializer {
 	private static void updateBossEnderman() {
 		if (phase1Boss == null || !phase1Boss.isAlive() || phase1Boss.isRemoved()) {
 			ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
-			dropRandomizedLoot(world, arenaCenter, 4);
+			spawnLootChest(world, arenaCenter, 4);
 			phase1Boss = null;
-			startCooldown(5, 300); // 15 ثواني
+			startCooldown(5, 300);
 			return;
 		}
 
@@ -280,6 +299,7 @@ public class NightmareRealms implements ModInitializer {
 		ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
 		ServerPlayerEntity player = bossBar.getPlayers().iterator().next();
 
+		removeLootChest(world, arenaCenter);
 		bossBar.setName(Text.literal("Dread Knight - Phase V").formatted(Formatting.DARK_RED, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.RED);
 
@@ -294,8 +314,7 @@ public class NightmareRealms implements ModInitializer {
 		phase2Boss.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(450.0);
 		phase2Boss.setHealth(450.0f);
 		phase2Boss.equipStack(EquipmentSlot.MAINHAND, new ItemStack(Items.NETHERITE_SWORD));
-		phase2Boss.setCustomName(Text.literal("🔥 DREAD KNIGHT 🔥").formatted(Formatting.RED, Formatting.BOLD));
-		phase2Boss.setCustomNameVisible(true);
+		phase2Boss.setTarget(player);
 
 		world.spawnEntity(phase2Boss);
 	}
@@ -303,9 +322,9 @@ public class NightmareRealms implements ModInitializer {
 	private static void updateBossWitherSkeleton() {
 		if (phase2Boss == null || !phase2Boss.isAlive() || phase2Boss.isRemoved()) {
 			ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
-			dropRandomizedLoot(world, arenaCenter, 5);
+			spawnLootChest(world, arenaCenter, 5);
 			phase2Boss = null;
-			startCooldown(6, 300); // 15 ثواني
+			startCooldown(6, 300);
 			return;
 		}
 
@@ -326,6 +345,7 @@ public class NightmareRealms implements ModInitializer {
 		ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
 		ServerPlayerEntity player = bossBar.getPlayers().iterator().next();
 
+		removeLootChest(world, arenaCenter);
 		bossBar.setName(Text.literal("IRON TITAN - Phase VI").formatted(Formatting.GOLD, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.YELLOW);
 
@@ -343,8 +363,7 @@ public class NightmareRealms implements ModInitializer {
 		ironTitanBoss.getAttributeInstance(EntityAttributes.ATTACK_DAMAGE).setBaseValue(22.0);
 		ironTitanBoss.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 99999, 1));
 		ironTitanBoss.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, 99999, 1));
-		ironTitanBoss.setCustomName(Text.literal("🛡️ IRON TITAN 🛡️").formatted(Formatting.GOLD, Formatting.BOLD));
-		ironTitanBoss.setCustomNameVisible(true);
+		ironTitanBoss.setTarget(player);
 
 		world.spawnEntity(ironTitanBoss);
 	}
@@ -352,7 +371,7 @@ public class NightmareRealms implements ModInitializer {
 	private static void updateBossIronTitan() {
 		if (ironTitanBoss == null || !ironTitanBoss.isAlive() || ironTitanBoss.isRemoved()) {
 			ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
-			dropRandomizedLoot(world, arenaCenter, 6);
+			spawnLootChest(world, arenaCenter, 6);
 			ironTitanBoss = null;
 			startCooldown(7, 400); // 20 ثانية راحة قبل البيج بوس الأخير!
 			return;
@@ -366,7 +385,6 @@ public class NightmareRealms implements ModInitializer {
 			player.damage(world, world.getDamageSources().generic(), 14.0f);
 			player.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, 80, 2));
 			world.playSound(null, ironTitanBoss.getBlockPos(), SoundEvents.ENTITY_ZOMBIE_ATTACK_IRON_DOOR, SoundCategory.HOSTILE, 3.0f, 0.5f);
-			player.sendMessage(Text.literal("The Iron Titan slammed the ground!").formatted(Formatting.GOLD, Formatting.BOLD), true);
 		}
 	}
 
@@ -375,26 +393,22 @@ public class NightmareRealms implements ModInitializer {
 		ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
 		ServerPlayerEntity player = bossBar.getPlayers().iterator().next();
 
+		removeLootChest(world, arenaCenter);
 		bossBar.setName(Text.literal("NIGHTMARE WITHER - FINAL BIG BOSS").formatted(Formatting.DARK_GRAY, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.WHITE);
 
 		player.requestTeleport(arenaCenter.getX() + 15.5, arenaCenter.getY() + 1.0, arenaCenter.getZ() + 0.5);
 		buildColosseumArena(world, arenaCenter, ARENA_RADIUS, ARENA_HEIGHT, 5);
 
-		showCinematicIntro(player, "☠️ NIGHTMARE WITHER ☠️", "THE BIG BOSS: FACE ABSOLUTE DEATH!", Formatting.DARK_GRAY);
+		showCinematicIntro(player, "☠️ NIGHTMARE WITHER ☠️", "FACE ABSOLUTE DEATH!", Formatting.DARK_GRAY);
 		playEntranceEffects(world, arenaCenter, 3);
 
 		phase3Boss = new WitherEntity(EntityType.WITHER, world);
 		phase3Boss.refreshPositionAndAngles(arenaCenter.getX() + 0.5, arenaCenter.getY() + 2.0, arenaCenter.getZ() + 0.5, 0, 0);
 
-		phase3Boss.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(500.0);
-		phase3Boss.setHealth(500.0f);
-		phase3Boss.setCustomName(Text.literal("☠️ NIGHTMARE WITHER ☠️").formatted(Formatting.DARK_GRAY, Formatting.BOLD));
-		phase3Boss.setCustomNameVisible(true);
-
-		if (!bossBar.getPlayers().isEmpty()) {
-			phase3Boss.setTarget(bossBar.getPlayers().iterator().next());
-		}
+		phase3Boss.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(350.0);
+		phase3Boss.setHealth(350.0f);
+		phase3Boss.setTarget(player);
 
 		world.spawnEntity(phase3Boss);
 	}
@@ -403,7 +417,7 @@ public class NightmareRealms implements ModInitializer {
 		if (phase3Boss == null || !phase3Boss.isAlive() || phase3Boss.isRemoved()) {
 			ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
 
-			dropRandomizedLoot(world, arenaCenter, 7);
+			spawnLootChest(world, arenaCenter, 7);
 			clearArena(world, arenaCenter, ARENA_RADIUS, ARENA_HEIGHT);
 
 			currentPhase = 0;
@@ -434,6 +448,82 @@ public class NightmareRealms implements ModInitializer {
 		}
 	}
 
+	// ==================== LOOT CHEST & DOWNGRADE SYSTEM ====================
+
+	private static void spawnLootChest(ServerWorld world, BlockPos center, int phase) {
+		BlockPos chestPos = center.add(0, 0, 0);
+		world.setBlockState(chestPos, Blocks.CHEST.getDefaultState());
+
+		if (world.getBlockEntity(chestPos) instanceof ChestBlockEntity chest) {
+			// الجوائز المضمونة المخصصة لكل مرحلة
+			if (phase == 1) {
+				chest.setStack(0, new ItemStack(Items.NETHERITE_CHESTPLATE));
+			} else if (phase == 2) {
+				chest.setStack(0, new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 3));
+				chest.setStack(1, new ItemStack(Items.MILK_BUCKET, 2));
+			} else if (phase == 3) {
+				ItemStack mace = new ItemStack(Items.MACE);
+				chest.setStack(0, mace);
+			} else if (phase == 4) {
+				chest.setStack(0, new ItemStack(Items.NETHERITE_LEGGINGS));
+				chest.setStack(1, new ItemStack(Items.NETHERITE_BOOTS));
+			} else if (phase == 5) {
+				chest.setStack(0, new ItemStack(Items.TOTEM_OF_UNDYING, 2));
+			} else if (phase == 6) {
+				chest.setStack(0, new ItemStack(Items.CRYING_OBSIDIAN, 8));
+				chest.setStack(1, new ItemStack(Items.END_CRYSTAL, 4));
+				chest.setStack(2, new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 2));
+			} else if (phase == 7) {
+				chest.setStack(0, new ItemStack(Items.NETHERITE_BLOCK, 4));
+				chest.setStack(1, new ItemStack(Items.ELYTRA));
+			}
+
+			// إضافة عشوائية لباقي الخانات (تشمل Mace وSpear)
+			for (int slot = 3; slot < 12; slot++) {
+				chest.setStack(slot, generateRandomItem(world, phase));
+			}
+		}
+	}
+
+	private static void removeLootChest(ServerWorld world, BlockPos center) {
+		BlockPos chestPos = center.add(0, 0, 0);
+		if (world.getBlockState(chestPos).isOf(Blocks.CHEST)) {
+			world.setBlockState(chestPos, Blocks.AIR.getDefaultState());
+		}
+	}
+
+	private static void handlePlayerDeath(ServerPlayerEntity player) {
+		applyDowngradeToPlayer(player);
+
+		int prevPhase = Math.max(1, currentPhase - 1);
+		currentPhase = prevPhase;
+
+		player.sendMessage(Text.literal("You died! Gear downgraded and moved back 1 Wave.").formatted(Formatting.RED, Formatting.BOLD), false);
+		startCooldown(prevPhase, 200);
+	}
+
+	private static void applyDowngradeToPlayer(ServerPlayerEntity player) {
+		for (int i = 0; i < player.getInventory().size(); i++) {
+			ItemStack stack = player.getInventory().getStack(i);
+			if (!stack.isEmpty() && stack.isDamageable()) {
+				int damageAmount = stack.getMaxDamage() / 3;
+				stack.setDamage(Math.min(stack.getMaxDamage() - 1, stack.getDamage() + damageAmount));
+			}
+		}
+	}
+
+	private static void resetChallengeState() {
+		currentPhase = 0;
+		cooldownTimer = 0;
+		currentWaveMobs.clear();
+		bossBar.setVisible(false);
+		bossBar.clearPlayers();
+		phase1Boss = null;
+		phase2Boss = null;
+		ironTitanBoss = null;
+		phase3Boss = null;
+	}
+
 	// ==================== HELPER METHODS ====================
 
 	private static void startNextPhaseActual() {
@@ -450,7 +540,7 @@ public class NightmareRealms implements ModInitializer {
 
 	private static void startCooldown(int nextPhase, int ticks) {
 		currentPhase = nextPhase;
-		cooldownTimer = ticks; // 300 ticks = 15s, 400 ticks = 20s
+		cooldownTimer = ticks;
 		bossBar.setPercent(1.0f);
 	}
 
@@ -497,15 +587,15 @@ public class NightmareRealms implements ModInitializer {
 				if (distance <= radius) {
 					BlockPos floorPos = center.add(x, -1, z);
 
-					if (theme == 1) { // Normal Waves
+					if (theme == 1) {
 						world.setBlockState(floorPos, Blocks.DEEPSLATE_BRICKS.getDefaultState());
-					} else if (theme == 2) { // Enderman
+					} else if (theme == 2) {
 						world.setBlockState(floorPos, (Math.abs(x) + Math.abs(z)) % 2 == 0 ? Blocks.CRYING_OBSIDIAN.getDefaultState() : Blocks.POLISHED_DEEPSLATE.getDefaultState());
-					} else if (theme == 3) { // Nether Skeleton
+					} else if (theme == 3) {
 						world.setBlockState(floorPos, (Math.abs(x) + Math.abs(z)) % 2 == 0 ? Blocks.NETHER_BRICKS.getDefaultState() : Blocks.MAGMA_BLOCK.getDefaultState());
-					} else if (theme == 4) { // Iron Titan
+					} else if (theme == 4) {
 						world.setBlockState(floorPos, (Math.abs(x) + Math.abs(z)) % 2 == 0 ? Blocks.CRACKED_DEEPSLATE_BRICKS.getDefaultState() : Blocks.COPPER_BLOCK.getDefaultState());
-					} else { // Big Boss Wither
+					} else {
 						world.setBlockState(floorPos, (Math.abs(x) + Math.abs(z)) % 2 == 0 ? Blocks.SCULK.getDefaultState() : Blocks.SOUL_SOIL.getDefaultState());
 					}
 				}
@@ -537,6 +627,7 @@ public class NightmareRealms implements ModInitializer {
 						world.getBlockState(pos).isOf(Blocks.SOUL_SOIL) ||
 						world.getBlockState(pos).isOf(Blocks.COPPER_BLOCK) ||
 						world.getBlockState(pos).isOf(Blocks.CRACKED_DEEPSLATE_BRICKS) ||
+						world.getBlockState(pos).isOf(Blocks.CHEST) ||
 						world.getBlockState(pos).isOf(Blocks.CRYING_OBSIDIAN) ||
 						world.getBlockState(pos).isOf(Blocks.POLISHED_DEEPSLATE)) {
 						world.setBlockState(pos, Blocks.AIR.getDefaultState());
@@ -550,71 +641,49 @@ public class NightmareRealms implements ModInitializer {
 		return world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT).getOptional(key).orElse(null);
 	}
 
-	// ==================== نظام اللوت المتنوع المكتمل ====================
-
-	private static void dropRandomizedLoot(ServerWorld world, BlockPos pos, int phase) {
-		ItemStack specialReward = ItemStack.EMPTY;
-		RegistryEntry<Enchantment> sharpness = getEnchantment(world, Enchantments.SHARPNESS);
-		RegistryEntry<Enchantment> protection = getEnchantment(world, Enchantments.PROTECTION);
-		RegistryEntry<Enchantment> unbreaking = getEnchantment(world, Enchantments.UNBREAKING);
-
-		if (phase == 4) {
-			specialReward = new ItemStack(Items.NETHERITE_CHESTPLATE);
-			specialReward.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Endermite Chestplate").formatted(Formatting.DARK_PURPLE, Formatting.BOLD));
-			if (protection != null) specialReward.addEnchantment(protection, 4);
-		} else if (phase == 5) {
-			specialReward = new ItemStack(Items.NETHERITE_SWORD);
-			specialReward.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Dread Blade").formatted(Formatting.RED, Formatting.BOLD));
-			if (sharpness != null) specialReward.addEnchantment(sharpness, 5);
-		} else if (phase == 6) {
-			specialReward = new ItemStack(Items.NETHERITE_AXE);
-			specialReward.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Titan Cleaver").formatted(Formatting.GOLD, Formatting.BOLD));
-			if (sharpness != null) specialReward.addEnchantment(sharpness, 5);
-		} else if (phase == 7) {
-			specialReward = new ItemStack(Items.NETHERITE_HELMET);
-			specialReward.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Nightmare Crown").formatted(Formatting.GOLD, Formatting.BOLD));
-			if (protection != null) specialReward.addEnchantment(protection, 5);
-		}
-
-		if (!specialReward.isEmpty()) {
-			world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY() + 1.0, pos.getZ(), specialReward));
-		}
-
-		// إسقاط لوت متتوع (أسلحة، خوذات، بناطيل، أحذية، تفاح ذهبي، وأحجار نادرة)
-		int numberOfItems = 3 + random.nextInt(phase + 1);
-		for (int i = 0; i < numberOfItems; i++) {
-			ItemStack lootItem = generateRandomItem(world, phase);
-			if (!lootItem.isEmpty()) {
-				world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY() + 1.0, pos.getZ(), lootItem));
-			}
-		}
-	}
+	// ==================== GENERATE RANDOM LOOT (INCLUDING MACE & SPEAR) ====================
 
 	private static ItemStack generateRandomItem(ServerWorld world, int phase) {
-		int category = random.nextInt(5);
+		int category = random.nextInt(6);
 
 		RegistryEntry<Enchantment> sharpness = getEnchantment(world, Enchantments.SHARPNESS);
-		RegistryEntry<Enchantment> power = getEnchantment(world, Enchantments.POWER);
+		RegistryEntry<Enchantment> density = getEnchantment(world, Enchantments.DENSITY);
+		RegistryEntry<Enchantment> lunge = getEnchantment(world, Enchantments.LUNGE);
 		RegistryEntry<Enchantment> unbreaking = getEnchantment(world, Enchantments.UNBREAKING);
 		RegistryEntry<Enchantment> protection = getEnchantment(world, Enchantments.PROTECTION);
 
 		boolean isNetheriteAllowed = (phase >= 4) && random.nextBoolean();
 
 		switch (category) {
-			case 0 -> { // أسلحة
+			case 0 -> { // أسلحة تقليدية (سيف / بلطة)
 				Item weaponItem = isNetheriteAllowed ? Items.NETHERITE_SWORD : Items.DIAMOND_SWORD;
 				ItemStack weapon = new ItemStack(weaponItem);
 				if (sharpness != null) weapon.addEnchantment(sharpness, 2 + random.nextInt(3));
 				if (unbreaking != null) weapon.addEnchantment(unbreaking, 1 + random.nextInt(3));
 				return weapon;
 			}
-			case 1 -> { // دوع علوية
+			case 1 -> { // الأسلحة الجديدة (Mace & Spear)
+				if (random.nextBoolean()) {
+					// Mace بتطويرة Density
+					ItemStack mace = new ItemStack(Items.MACE);
+					if (density != null) mace.addEnchantment(density, 1 + random.nextInt(4));
+					if (unbreaking != null) mace.addEnchantment(unbreaking, 2);
+					return mace;
+				} else {
+					// Spear بتطويرة Lunge
+					ItemStack spear = new ItemStack(Items.SPEAR);
+					if (lunge != null) spear.addEnchantment(lunge, 1 + random.nextInt(3));
+					if (unbreaking != null) spear.addEnchantment(unbreaking, 2);
+					return spear;
+				}
+			}
+			case 2 -> { // دروع علوية (Chestplate)
 				Item armorItem = isNetheriteAllowed ? Items.NETHERITE_CHESTPLATE : Items.DIAMOND_CHESTPLATE;
 				ItemStack armor = new ItemStack(armorItem);
 				if (protection != null) armor.addEnchantment(protection, 2 + random.nextInt(3));
 				return armor;
 			}
-			case 2 -> { // بناطيل وأحذية متوفرة الآن!
+			case 3 -> { // بناطيل وأحذية (Leggings & Boots)
 				Item lowerArmor = random.nextBoolean() ? 
 						(isNetheriteAllowed ? Items.NETHERITE_LEGGINGS : Items.DIAMOND_LEGGINGS) : 
 						(isNetheriteAllowed ? Items.NETHERITE_BOOTS : Items.DIAMOND_BOOTS);
@@ -622,10 +691,10 @@ public class NightmareRealms implements ModInitializer {
 				if (protection != null) armor.addEnchantment(protection, 2 + random.nextInt(3));
 				return armor;
 			}
-			case 3 -> { // أطعمة وتفاح ذهبي
+			case 4 -> { // أطعمة وتفاح ذهبي
 				return new ItemStack(Items.GOLDEN_APPLE, 2 + random.nextInt(4));
 			}
-			default -> { // أحجار كريمة ودايموند
+			default -> { // دايموند وموارد
 				return new ItemStack(Items.DIAMOND, 3 + random.nextInt(5));
 			}
 		}
