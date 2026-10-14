@@ -31,7 +31,6 @@ import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
 import net.minecraft.network.packet.s2c.play.SubtitleS2CPacket;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.registry.Registries;
-import net.minecraft.registry.Registry;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.registry.entry.RegistryEntry;
@@ -55,9 +54,6 @@ public class NightmareRealms implements ModInitializer {
 
 	public static final String MOD_ID = "nightmarerealms";
 
-	public static final RegistryKey<Item> SPEAR_KEY = RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, "spear"));
-	public static Item CUSTOM_SPEAR;
-
 	private static ServerBossBar bossBar;
 	private static int currentPhase = 0; // 1..3 Waves, 4..7 Bosses
 	private static int tickCounter = 0;
@@ -76,13 +72,6 @@ public class NightmareRealms implements ModInitializer {
 
 	@Override
 	public void onInitialize() {
-		// تسجيل السلاح المخصص بأمان داخل onInitialize لمنع الـ Crash
-		CUSTOM_SPEAR = Registry.register(
-				Registries.ITEM,
-				SPEAR_KEY,
-				new Item(new Item.Settings().registryKey(SPEAR_KEY).maxDamage(500))
-		);
-
 		bossBar = new ServerBossBar(
 				Text.literal("Nightmare Realm").formatted(Formatting.DARK_PURPLE, Formatting.BOLD),
 				BossBar.Color.PURPLE,
@@ -284,8 +273,12 @@ public class NightmareRealms implements ModInitializer {
 		phase1Boss.refreshPositionAndAngles(arenaCenter.getX() + 0.5, arenaCenter.getY() + 1, arenaCenter.getZ() + 0.5, 0, 0);
 		phase1Boss.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(300.0);
 		phase1Boss.setHealth(300.0f);
-		phase1Boss.setTarget(player);
+		
+		// زيادة سرعة الأندرمان بنسبة 35%
+		phase1Boss.getAttributeInstance(EntityAttributes.MOVEMENT_SPEED).setBaseValue(0.30f * 1.35f);
+		phase1Boss.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 99999, 1, false, false));
 
+		phase1Boss.setTarget(player);
 		world.spawnEntity(phase1Boss);
 	}
 
@@ -305,7 +298,7 @@ public class NightmareRealms implements ModInitializer {
 			healBoss(phase1Boss, 300.0, 0.15);
 		}
 
-		if (tickCounter % 60 == 0 && phase1Boss.getTarget() != null) {
+		if (tickCounter % 50 == 0 && phase1Boss.getTarget() != null) { // تقليل وقت التلبرت ليتناسب مع السرعة الجديدة
 			ServerWorld world = (ServerWorld) phase1Boss.getEntityWorld();
 			BlockPos targetPos = phase1Boss.getTarget().getBlockPos().add(world.random.nextInt(9) - 4, 0, world.random.nextInt(9) - 4);
 			if (targetPos.getSquaredDistance(arenaCenter) < (ARENA_RADIUS - 4) * (ARENA_RADIUS - 4)) {
@@ -701,13 +694,14 @@ public class NightmareRealms implements ModInitializer {
 		return world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT).getOptional(key).orElse(null);
 	}
 
-	// ==================== GENERATE RANDOM LOOT WITH CUSTOM SPEAR ====================
+	// ==================== GENERATE RANDOM LOOT WITH VANILLA SPEAR ====================
 
 	private static ItemStack generateRandomItem(ServerWorld world, int phase) {
 		int category = random.nextInt(6);
 
 		RegistryEntry<Enchantment> sharpness = getEnchantment(world, Enchantments.SHARPNESS);
 		RegistryEntry<Enchantment> density = getEnchantment(world, Enchantments.DENSITY);
+		RegistryEntry<Enchantment> lunge = getEnchantment(world, RegistryKey.of(RegistryKeys.ENCHANTMENT, Identifier.of("minecraft", "lunge")));
 		RegistryEntry<Enchantment> unbreaking = getEnchantment(world, Enchantments.UNBREAKING);
 		RegistryEntry<Enchantment> protection = getEnchantment(world, Enchantments.PROTECTION);
 
@@ -721,16 +715,20 @@ public class NightmareRealms implements ModInitializer {
 				if (unbreaking != null) weapon.addEnchantment(unbreaking, 1 + random.nextInt(3));
 				return weapon;
 			}
-			case 1 -> { // Mace أو Custom Spear
+			case 1 -> {
 				if (random.nextBoolean()) {
-					ItemStack mace = new ItemStack(Items.MACE);
+					ItemStack mace = newItemStack(Items.MACE);
 					if (density != null) mace.addEnchantment(density, 1 + random.nextInt(4));
 					if (unbreaking != null) mace.addEnchantment(unbreaking, 2);
 					return mace;
 				} else {
-					ItemStack spearStack = new ItemStack(CUSTOM_SPEAR);
-					spearStack.set(DataComponentTypes.CUSTOM_NAME, Text.literal("⚡ Nightmare Spear ⚡").formatted(Formatting.AQUA, Formatting.BOLD));
-					if (sharpness != null) spearStack.addEnchantment(sharpness, 3 + random.nextInt(2));
+					Item vanillaSpear = Registries.ITEM.get(Identifier.of("minecraft", "spear"));
+					ItemStack spearStack = new ItemStack(vanillaSpear != null ? vanillaSpear : Items.TRIDENT);
+					if (lunge != null) {
+						spearStack.addEnchantment(lunge, 1 + random.nextInt(3));
+					} else if (sharpness != null) {
+						spearStack.addEnchantment(sharpness, 3);
+					}
 					if (unbreaking != null) spearStack.addEnchantment(unbreaking, 2);
 					return spearStack;
 				}
@@ -756,5 +754,9 @@ public class NightmareRealms implements ModInitializer {
 				return new ItemStack(Items.DIAMOND, 3 + random.nextInt(5));
 			}
 		}
+	}
+
+	private static ItemStack newItemStack(Item item) {
+		return new ItemStack(item);
 	}
 }
