@@ -313,11 +313,11 @@ public class NightmareRealms implements ModInitializer {
 			healBoss(phase1Boss, 300.0, 0.15);
 		}
 
-		// مهارة التمويه والتلبرت خلف اللاعب (باستخدام getPos المتاحة في السيرفر)
+		// مهارة التمويه والتلبرت خلف اللاعب باستخدام الإحداثيات المباشرة لضمان التوافق التام
 		if (tickCounter % 70 == 0 && phase1Boss.getTarget() instanceof ServerPlayerEntity player) {
 			ServerWorld world = (ServerWorld) phase1Boss.getEntityWorld();
 			Vec3d playerLook = player.getRotationVec(1.0F).multiply(-2.0);
-			Vec3d backPos = player.getPos().add(playerLook.x, 0, playerLook.z);
+			Vec3d backPos = new Vec3d(player.getX(), player.getY(), player.getZ()).add(playerLook.x, 0, playerLook.z);
 			
 			phase1Boss.teleport(backPos.x, player.getY(), backPos.z, true);
 			world.spawnParticles(ParticleTypes.PORTAL, phase1Boss.getX(), phase1Boss.getY() + 1, phase1Boss.getZ(), 25, 0.3, 1.0, 0.3, 0.1);
@@ -563,7 +563,7 @@ public class NightmareRealms implements ModInitializer {
 		if (currentPhase <= 1) {
 			currentPhase = 1;
 			player.sendMessage(Text.literal("You died! Restarting Wave 1.").formatted(Formatting.RED, Formatting.BOLD), false);
-			startWave1(player.getWorld(), player); // تم التصحيح هنا لاستخدام player.getWorld()
+			startWave1((ServerWorld) player.getEntityWorld(), player); // استخدام الإحداثيات والعالم الصحيح
 			return;
 		}
 
@@ -746,7 +746,6 @@ public class NightmareRealms implements ModInitializer {
 					if (unbreaking != null) mace.addEnchantment(unbreaking, 2);
 					return mace;
 				} else {
-					// سحب الـ Spear المضاف بالمعرف الصحيح من مودك الخارجي
 					Item moddedSpear = Registries.ITEM.get(Identifier.of("minecraft", "netherite_spear"));
 					if (moddedSpear == null || moddedSpear == Items.AIR) {
 						moddedSpear = Registries.ITEM.get(Identifier.of("minecraft", "spear"));
