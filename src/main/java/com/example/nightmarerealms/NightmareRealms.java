@@ -133,17 +133,16 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setColor(BossBar.Color.PURPLE);
 		bossBar.setVisible(true);
 
-		// 1. نقل اللاعب بعيداً عن السنتر بـ 15 بلوكة حتى لا يرسبن فوق البوس
+		// نقل اللاعب بعيداً عن السنتر بـ 15 بلوكة حتى لا يرسبن فوق البوس
 		player.requestTeleport(pos.getX() + 15.5, pos.getY() + 1.0, pos.getZ() + 0.5);
 
-		// 2. بناء الحلبة وتحديد ديكور Phase 1
+		// بناء الحلبة وتحديد ديكور Phase 1
 		buildColosseumArena(world, pos, ARENA_RADIUS, ARENA_HEIGHT, 1);
 
-		// 3. انترو سينمائي ملحمي
+		// انترو سينمائي ملحمي
 		showCinematicIntro(player, "⚡ SHADOW SOVEREIGN ⚡", "Phase I: The Darkness Awakens", Formatting.DARK_PURPLE);
 		playEntranceEffects(world, pos, 1);
 
-		// 4. ترسبن البوس في السنتر تماماً
 		phase1Boss = new EndermanEntity(EntityType.ENDERMAN, world);
 		phase1Boss.refreshPositionAndAngles(pos.getX() + 0.5, pos.getY() + 1, pos.getZ() + 0.5, 0, 0);
 
@@ -204,9 +203,7 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setName(Text.literal("Dread Knight - Phase II").formatted(Formatting.DARK_RED, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.RED);
 
-		// تحديث ديكور الحلبة لتناسب Phase 2 (Fire & Lava Theme)
 		buildColosseumArena(world, arenaCenter, ARENA_RADIUS, ARENA_HEIGHT, 2);
-
 		player.requestTeleport(arenaCenter.getX() + 15.5, arenaCenter.getY() + 1.0, arenaCenter.getZ() + 0.5);
 
 		showCinematicIntro(player, "🔥 DREAD KNIGHT 🔥", "Phase II: The Nether's Vengeance", Formatting.RED);
@@ -265,9 +262,7 @@ public class NightmareRealms implements ModInitializer {
 		bossBar.setName(Text.literal("Nightmare Wither - Final Phase").formatted(Formatting.DARK_GRAY, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.WHITE);
 
-		// تحديث ديكور الحلبة لتناسب Phase 3 (Soul & Death Theme)
 		buildColosseumArena(world, arenaCenter, ARENA_RADIUS, ARENA_HEIGHT, 3);
-
 		player.requestTeleport(arenaCenter.getX() + 15.5, arenaCenter.getY() + 1.0, arenaCenter.getZ() + 0.5);
 
 		showCinematicIntro(player, "☠️ NIGHTMARE WITHER ☠️", "Final Phase: Face Absolute Death", Formatting.DARK_GRAY);
@@ -346,8 +341,6 @@ public class NightmareRealms implements ModInitializer {
 		}
 	}
 
-	// ==================== سينمائيات الانترو والمؤثرات ====================
-
 	private static void showCinematicIntro(ServerPlayerEntity player, String titleText, String subtitleText, Formatting color) {
 		player.networkHandler.sendPacket(new TitleS2CPacket(Text.literal(titleText).formatted(color, Formatting.BOLD)));
 		player.networkHandler.sendPacket(new SubtitleS2CPacket(Text.literal(subtitleText).formatted(Formatting.GRAY, Formatting.ITALIC)));
@@ -364,4 +357,231 @@ public class NightmareRealms implements ModInitializer {
 			world.spawnParticles(ParticleTypes.WITCH, x, y, z, 300, 2.0, 3.0, 2.0, 0.1);
 			world.spawnParticles(ParticleTypes.PORTAL, x, y, z, 200, 3.0, 3.0, 3.0, 0.1);
 		} else if (phase == 2) {
-			world.playSound(null, pos, SoundEvents.ENTITY_GENERIC_EXPLODE.value(), SoundCategory.HOSTILE, 3
+			world.playSound(null, pos, SoundEvents.ENTITY_GENERIC_EXPLODE.value(), SoundCategory.HOSTILE, 3.0f, 0.7f);
+			world.spawnParticles(ParticleTypes.EXPLOSION_EMITTER, x, y, z, 10, 0, 0, 0, 0);
+			world.spawnParticles(ParticleTypes.FLAME, x, y, z, 400, 3.0, 3.0, 3.0, 0.2);
+		} else if (phase == 3) {
+			LightningEntity lightning = new LightningEntity(EntityType.LIGHTNING_BOLT, world);
+			lightning.refreshPositionAfterTeleport(x, y, z);
+			world.spawnEntity(lightning);
+
+			world.playSound(null, pos, SoundEvents.ENTITY_WITHER_SPAWN, SoundCategory.HOSTILE, 3.0f, 0.5f);
+			world.spawnParticles(ParticleTypes.SOUL_FIRE_FLAME, x, y, z, 500, 3.5, 4.0, 3.5, 0.2);
+			world.spawnParticles(ParticleTypes.LARGE_SMOKE, x, y, z, 300, 3.0, 3.0, 3.0, 0.1);
+		}
+	}
+
+	private static void spawnBossAura(ServerWorld world, double x, double y, double z, int phase) {
+		if (phase == 1) {
+			world.spawnParticles(ParticleTypes.PORTAL, x, y + 1.0, z, 8, 0.5, 1.0, 0.5, 0.05);
+			world.spawnParticles(ParticleTypes.REVERSE_PORTAL, x, y + 0.5, z, 6, 0.4, 0.6, 0.4, 0.02);
+		} else if (phase == 2) {
+			world.spawnParticles(ParticleTypes.FLAME, x, y + 1.0, z, 12, 0.6, 1.0, 0.6, 0.03);
+			world.spawnParticles(ParticleTypes.SMOKE, x, y + 1.5, z, 6, 0.4, 0.6, 0.4, 0.01);
+		} else if (phase == 3) {
+			world.spawnParticles(ParticleTypes.SOUL_FIRE_FLAME, x, y + 1.2, z, 15, 0.8, 1.0, 0.8, 0.04);
+			world.spawnParticles(ParticleTypes.SCULK_SOUL, x, y + 0.5, z, 8, 0.6, 0.6, 0.6, 0.02);
+		}
+	}
+
+	private static void buildColosseumArena(ServerWorld world, BlockPos center, int radius, int height, int phase) {
+		for (int x = -radius; x <= radius; x++) {
+			for (int z = -radius; z <= radius; z++) {
+				double distance = Math.sqrt(x * x + z * z);
+
+				if (distance <= radius) {
+					BlockPos floorPos = center.add(x, -1, z);
+
+					if (phase == 1) {
+						if (distance > radius - 2) world.setBlockState(floorPos, Blocks.POLISHED_BLACKSTONE_BRICKS.getDefaultState());
+						else if (distance < 5) world.setBlockState(floorPos, Blocks.CRYING_OBSIDIAN.getDefaultState());
+						else if ((Math.abs(x) + Math.abs(z)) % 2 == 0) world.setBlockState(floorPos, Blocks.DEEPSLATE_BRICKS.getDefaultState());
+						else world.setBlockState(floorPos, Blocks.POLISHED_DEEPSLATE.getDefaultState());
+					} else if (phase == 2) {
+						if (distance > radius - 2) world.setBlockState(floorPos, Blocks.NETHER_BRICKS.getDefaultState());
+						else if (distance < 5) world.setBlockState(floorPos, Blocks.MAGMA_BLOCK.getDefaultState());
+						else if ((Math.abs(x) + Math.abs(z)) % 2 == 0) world.setBlockState(floorPos, Blocks.RED_NETHER_BRICKS.getDefaultState());
+						else world.setBlockState(floorPos, Blocks.BASALT.getDefaultState());
+					} else {
+						if (distance > radius - 2) world.setBlockState(floorPos, Blocks.POLISHED_BLACKSTONE.getDefaultState());
+						else if (distance < 5) world.setBlockState(floorPos, Blocks.SCULK.getDefaultState());
+						else if ((Math.abs(x) + Math.abs(z)) % 2 == 0) world.setBlockState(floorPos, Blocks.SOUL_SOIL.getDefaultState());
+						else world.setBlockState(floorPos, Blocks.DEEPSLATE_TILES.getDefaultState());
+					}
+
+					if ((Math.abs(x) == 12 && Math.abs(z) == 12) || (Math.abs(x) == 20 && Math.abs(z) == 0) || (Math.abs(x) == 0 && Math.abs(z) == 20)) {
+						world.setBlockState(center.add(x, 0, z), phase == 2 ? Blocks.CAMPFIRE.getDefaultState() : Blocks.SOUL_CAMPFIRE.getDefaultState());
+						world.setBlockState(center.add(x, 1, z), phase == 2 ? Blocks.NETHER_BRICK_FENCE.getDefaultState() : Blocks.POLISHED_BLACKSTONE_BRICK_WALL.getDefaultState());
+						world.setBlockState(center.add(x, 2, z), phase == 1 ? Blocks.SEA_LANTERN.getDefaultState() : (phase == 2 ? Blocks.GLOWSTONE.getDefaultState() : Blocks.SHULKER_BOX.getDefaultState()));
+					}
+				}
+
+				for (int y = 0; y < height; y++) {
+					BlockPos pos = center.add(x, y, z);
+
+					if (distance >= radius - 1 && distance <= radius) {
+						if (y == 0) {
+							world.setBlockState(pos, phase == 2 ? Blocks.NETHER_BRICK_WALL.getDefaultState() : Blocks.POLISHED_BLACKSTONE_WALL.getDefaultState());
+						} else {
+							world.setBlockState(pos, Blocks.BARRIER.getDefaultState());
+						}
+					} else if (distance < radius - 1 && y > 2) {
+						world.setBlockState(pos, Blocks.AIR.getDefaultState());
+					}
+				}
+			}
+		}
+	}
+
+	private static void clearArena(ServerWorld world, BlockPos center, int radius, int height) {
+		for (int x = -radius; x <= radius; x++) {
+			for (int z = -radius; z <= radius; z++) {
+				for (int y = -1; y <= height; y++) {
+					BlockPos pos = center.add(x, y, z);
+					if (world.getBlockState(pos).isOf(Blocks.BARRIER) || 
+						world.getBlockState(pos).isOf(Blocks.POLISHED_BLACKSTONE_WALL) || 
+						world.getBlockState(pos).isOf(Blocks.NETHER_BRICK_WALL) ||
+						world.getBlockState(pos).isOf(Blocks.CAMPFIRE) ||
+						world.getBlockState(pos).isOf(Blocks.SOUL_CAMPFIRE) || 
+						world.getBlockState(pos).isOf(Blocks.POLISHED_BLACKSTONE_BRICKS) ||
+						world.getBlockState(pos).isOf(Blocks.NETHER_BRICKS) ||
+						world.getBlockState(pos).isOf(Blocks.RED_NETHER_BRICKS) ||
+						world.getBlockState(pos).isOf(Blocks.MAGMA_BLOCK) ||
+						world.getBlockState(pos).isOf(Blocks.SCULK) ||
+						world.getBlockState(pos).isOf(Blocks.SOUL_SOIL) ||
+						world.getBlockState(pos).isOf(Blocks.CRYING_OBSIDIAN) ||
+						world.getBlockState(pos).isOf(Blocks.DEEPSLATE_BRICKS) ||
+						world.getBlockState(pos).isOf(Blocks.POLISHED_DEEPSLATE)) {
+						world.setBlockState(pos, Blocks.AIR.getDefaultState());
+					}
+				}
+			}
+		}
+	}
+
+	private static void healBoss(net.minecraft.entity.mob.MobEntity boss, double maxHealth, double percentage) {
+		float healAmount = (float) (maxHealth * percentage);
+		boss.heal(healAmount);
+	}
+
+	private static RegistryEntry<Enchantment> getEnchantment(ServerWorld world, RegistryKey<Enchantment> key) {
+		return world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT).getOptional(key).orElse(null);
+	}
+
+	private static void dropRandomizedLoot(ServerWorld world, BlockPos pos, int phase) {
+		ItemStack specialReward = ItemStack.EMPTY;
+		RegistryEntry<Enchantment> sharpness = getEnchantment(world, Enchantments.SHARPNESS);
+		RegistryEntry<Enchantment> protection = getEnchantment(world, Enchantments.PROTECTION);
+		RegistryEntry<Enchantment> unbreaking = getEnchantment(world, Enchantments.UNBREAKING);
+
+		if (phase == 1) {
+			specialReward = new ItemStack(Items.NETHERITE_CHESTPLATE);
+			specialReward.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Endermite Chestplate").formatted(Formatting.DARK_PURPLE, Formatting.BOLD));
+			if (protection != null) specialReward.addEnchantment(protection, 4);
+		} else if (phase == 2) {
+			specialReward = new ItemStack(Items.NETHERITE_SWORD);
+			specialReward.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Dread Blade").formatted(Formatting.RED, Formatting.BOLD));
+			if (sharpness != null) specialReward.addEnchantment(sharpness, 5);
+			if (unbreaking != null) specialReward.addEnchantment(unbreaking, 3);
+		} else if (phase == 3) {
+			specialReward = new ItemStack(Items.NETHERITE_HELMET);
+			specialReward.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Nightmare Crown").formatted(Formatting.GOLD, Formatting.BOLD));
+			if (protection != null) specialReward.addEnchantment(protection, 5);
+			if (unbreaking != null) specialReward.addEnchantment(unbreaking, 3);
+		}
+
+		if (!specialReward.isEmpty()) {
+			world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), specialReward));
+		}
+
+		int numberOfItems = 3 + random.nextInt(phase + 2);
+		for (int i = 0; i < numberOfItems; i++) {
+			ItemStack lootItem = generateRandomItem(world, phase);
+			if (!lootItem.isEmpty()) {
+				world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), lootItem));
+			}
+		}
+	}
+
+	private static ItemStack generateRandomItem(ServerWorld world, int phase) {
+		int category = random.nextInt(4);
+
+		RegistryEntry<Enchantment> sharpness = getEnchantment(world, Enchantments.SHARPNESS);
+		RegistryEntry<Enchantment> power = getEnchantment(world, Enchantments.POWER);
+		RegistryEntry<Enchantment> unbreaking = getEnchantment(world, Enchantments.UNBREAKING);
+		RegistryEntry<Enchantment> protection = getEnchantment(world, Enchantments.PROTECTION);
+		RegistryEntry<Enchantment> mending = getEnchantment(world, Enchantments.MENDING);
+
+		boolean isNetheriteAllowed = (phase >= 2) && random.nextBoolean();
+
+		switch (category) {
+			case 0 -> {
+				Item weaponItem;
+				int roll = random.nextInt(4);
+				if (roll == 0) weaponItem = isNetheriteAllowed ? Items.NETHERITE_SWORD : Items.DIAMOND_SWORD;
+				else if (roll == 1) weaponItem = isNetheriteAllowed ? Items.NETHERITE_AXE : Items.DIAMOND_AXE;
+				else if (roll == 2) weaponItem = Items.BOW;
+				else weaponItem = Items.CROSSBOW;
+
+				ItemStack weapon = new ItemStack(weaponItem);
+				if (weaponItem == Items.BOW || weaponItem == Items.CROSSBOW) {
+					if (power != null) weapon.addEnchantment(power, 2 + random.nextInt(4));
+				} else {
+					if (sharpness != null) weapon.addEnchantment(sharpness, 2 + random.nextInt(4));
+				}
+				if (unbreaking != null) weapon.addEnchantment(unbreaking, 1 + random.nextInt(3));
+				if (phase == 3 && mending != null && random.nextBoolean()) weapon.addEnchantment(mending, 1);
+
+				if (phase == 3) {
+					weapon.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Nightmare Conqueror").formatted(Formatting.GOLD, Formatting.BOLD));
+				}
+				return weapon;
+			}
+			case 1 -> {
+				if (phase == 3 && random.nextInt(4) == 0) {
+					ItemStack elytra = new ItemStack(Items.ELYTRA);
+					if (unbreaking != null) elytra.addEnchantment(unbreaking, 3);
+					if (mending != null) elytra.addEnchantment(mending, 1);
+					return elytra;
+				}
+
+				Item armorItem;
+				int armorPiece = random.nextInt(4);
+				if (armorPiece == 0) armorItem = isNetheriteAllowed ? Items.NETHERITE_HELMET : Items.DIAMOND_HELMET;
+				else if (armorPiece == 1) armorItem = isNetheriteAllowed ? Items.NETHERITE_CHESTPLATE : Items.DIAMOND_CHESTPLATE;
+				else if (armorPiece == 2) armorItem = isNetheriteAllowed ? Items.NETHERITE_LEGGINGS : Items.DIAMOND_LEGGINGS;
+				else armorItem = isNetheriteAllowed ? Items.NETHERITE_BOOTS : Items.DIAMOND_BOOTS;
+
+				ItemStack armor = new ItemStack(armorItem);
+				if (protection != null) armor.addEnchantment(protection, 2 + random.nextInt(3));
+				if (unbreaking != null) armor.addEnchantment(unbreaking, 1 + random.nextInt(3));
+				return armor;
+			}
+			case 2 -> {
+				List<Item> consumables = new ArrayList<>();
+				consumables.add(Items.GOLDEN_APPLE);
+				consumables.add(Items.ENCHANTED_GOLDEN_APPLE);
+				consumables.add(Items.GOLDEN_CARROT);
+				consumables.add(Items.ENDER_PEARL);
+				consumables.add(Items.EXPERIENCE_BOTTLE);
+
+				Item selectedFood = consumables.get(random.nextInt(consumables.size()));
+				int amount = selectedFood == Items.ENCHANTED_GOLDEN_APPLE ? 1 + random.nextInt(2) : 4 + random.nextInt(12);
+				return new ItemStack(selectedFood, amount);
+			}
+			default -> {
+				if (phase == 1) {
+					return new ItemStack(random.nextBoolean() ? Items.GOLD_INGOT : Items.DIAMOND, 4 + random.nextInt(6));
+				} else if (phase == 2) {
+					Item mat = random.nextBoolean() ? Items.DIAMOND_BLOCK : Items.NETHERITE_INGOT;
+					return new ItemStack(mat, 2 + random.nextInt(5));
+				} else {
+					int rareType = random.nextInt(3);
+					if (rareType == 0) return new ItemStack(Items.TOTEM_OF_UNDYING, 1 + random.nextInt(3));
+					if (rareType == 1) return new ItemStack(Items.NETHERITE_BLOCK, 1 + random.nextInt(3));
+					return new ItemStack(Items.DIAMOND_BLOCK, 3 + random.nextInt(6));
+				}
+			}
+		}
+	}
+}
