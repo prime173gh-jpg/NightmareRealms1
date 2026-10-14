@@ -291,7 +291,6 @@ public class NightmareRealms implements ModInitializer {
 		phase1Boss.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(300.0);
 		phase1Boss.setHealth(300.0f);
 		
-		// ضبط سرعة مناسبة (أسرع بنسبة 20% لتكون متوازنة وممتعة)
 		phase1Boss.getAttributeInstance(EntityAttributes.MOVEMENT_SPEED).setBaseValue(0.30f * 1.20f);
 		phase1Boss.setTarget(player);
 
@@ -314,11 +313,10 @@ public class NightmareRealms implements ModInitializer {
 			healBoss(phase1Boss, 300.0, 0.15);
 		}
 
-		// مهارة الأندرمان المخادع (Fake-out & Behind Teleport)
+		// مهارة التمويه والتلبرت خلف اللاعب (باستخدام getPos المتاحة في السيرفر)
 		if (tickCounter % 70 == 0 && phase1Boss.getTarget() instanceof ServerPlayerEntity player) {
 			ServerWorld world = (ServerWorld) phase1Boss.getEntityWorld();
-			// تلبرت خلف اللاعب مباشرة للتمويه والمباغتة
-			Vec3d playerLook = player.getRotationVec(1.0F).multiply(-2.0); // خلف اللاعب بـ بلوكتين
+			Vec3d playerLook = player.getRotationVec(1.0F).multiply(-2.0);
 			Vec3d backPos = player.getPos().add(playerLook.x, 0, playerLook.z);
 			
 			phase1Boss.teleport(backPos.x, player.getY(), backPos.z, true);
@@ -562,11 +560,10 @@ public class NightmareRealms implements ModInitializer {
 	private static void handlePlayerDeath(ServerPlayerEntity player) {
 		applyDowngradeToPlayer(player);
 
-		// حماية ضد حلقة الموت التكرارية (لو اللاعب في أول مرحلة ومات، بيكتفي بإعادة الجولة 1 بأمان)
 		if (currentPhase <= 1) {
 			currentPhase = 1;
 			player.sendMessage(Text.literal("You died! Restarting Wave 1.").formatted(Formatting.RED, Formatting.BOLD), false);
-			startWave1(player.getServerWorld(), player);
+			startWave1(player.getWorld(), player); // تم التصحيح هنا لاستخدام player.getWorld()
 			return;
 		}
 
@@ -721,7 +718,7 @@ public class NightmareRealms implements ModInitializer {
 		return world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT).getOptional(key).orElse(null);
 	}
 
-	// ==================== GENERATE RANDOM LOOT (SPEAR & MACE INCLUDED) ====================
+	// ==================== GENERATE RANDOM LOOT WITH MODDED SPEAR ====================
 
 	private static ItemStack generateRandomItem(ServerWorld world, int phase) {
 		int category = random.nextInt(6);
@@ -749,8 +746,13 @@ public class NightmareRealms implements ModInitializer {
 					if (unbreaking != null) mace.addEnchantment(unbreaking, 2);
 					return mace;
 				} else {
-					Item vanillaSpear = Registries.ITEM.get(Identifier.of("minecraft", "spear"));
-					ItemStack spearStack = new ItemStack(vanillaSpear != null ? vanillaSpear : Items.TRIDENT);
+					// سحب الـ Spear المضاف بالمعرف الصحيح من مودك الخارجي
+					Item moddedSpear = Registries.ITEM.get(Identifier.of("minecraft", "netherite_spear"));
+					if (moddedSpear == null || moddedSpear == Items.AIR) {
+						moddedSpear = Registries.ITEM.get(Identifier.of("minecraft", "spear"));
+					}
+
+					ItemStack spearStack = new ItemStack(moddedSpear != null && moddedSpear != Items.AIR ? moddedSpear : Items.TRIDENT);
 					if (lunge != null) {
 						spearStack.addEnchantment(lunge, 1 + random.nextInt(3));
 					} else if (sharpness != null) {
