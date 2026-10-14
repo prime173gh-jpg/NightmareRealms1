@@ -30,6 +30,7 @@ import net.minecraft.item.Items;
 import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
 import net.minecraft.network.packet.s2c.play.SubtitleS2CPacket;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.registry.entry.RegistryEntry;
@@ -41,6 +42,7 @@ import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 
@@ -92,7 +94,6 @@ public class NightmareRealms implements ModInitializer {
 				return;
 			}
 
-			// فحص حالة موت اللاعب وإرجاعه جولة للخلف مع Downgrade
 			if (currentPhase > 0 && !bossBar.getPlayers().isEmpty()) {
 				ServerPlayerEntity player = bossBar.getPlayers().iterator().next();
 				if (player.isDead() || player.getHealth() <= 0) {
@@ -247,7 +248,7 @@ public class NightmareRealms implements ModInitializer {
 		if (currentWaveMobs.isEmpty()) {
 			ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
 			spawnLootChest(world, arenaCenter, currentPhase);
-			startCooldown(currentPhase + 1, 300); // 15 ثانية راحة
+			startCooldown(currentPhase + 1, 300);
 		}
 	}
 
@@ -373,7 +374,7 @@ public class NightmareRealms implements ModInitializer {
 			ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
 			spawnLootChest(world, arenaCenter, 6);
 			ironTitanBoss = null;
-			startCooldown(7, 400); // 20 ثانية راحة قبل البيج بوس الأخير!
+			startCooldown(7, 400);
 			return;
 		}
 
@@ -455,7 +456,6 @@ public class NightmareRealms implements ModInitializer {
 		world.setBlockState(chestPos, Blocks.CHEST.getDefaultState());
 
 		if (world.getBlockEntity(chestPos) instanceof ChestBlockEntity chest) {
-			// الجوائز المضمونة المخصصة لكل مرحلة
 			if (phase == 1) {
 				chest.setStack(0, new ItemStack(Items.NETHERITE_CHESTPLATE));
 			} else if (phase == 2) {
@@ -478,7 +478,6 @@ public class NightmareRealms implements ModInitializer {
 				chest.setStack(1, new ItemStack(Items.ELYTRA));
 			}
 
-			// إضافة عشوائية لباقي الخانات (تشمل Mace وSpear)
 			for (int slot = 3; slot < 12; slot++) {
 				chest.setStack(slot, generateRandomItem(world, phase));
 			}
@@ -641,49 +640,55 @@ public class NightmareRealms implements ModInitializer {
 		return world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT).getOptional(key).orElse(null);
 	}
 
-	// ==================== GENERATE RANDOM LOOT (INCLUDING MACE & SPEAR) ====================
+	// ==================== GENERATE RANDOM LOOT (DYNAMIC REGISTRY FOR SPEAR & LUNGE) ====================
 
 	private static ItemStack generateRandomItem(ServerWorld world, int phase) {
 		int category = random.nextInt(6);
 
 		RegistryEntry<Enchantment> sharpness = getEnchantment(world, Enchantments.SHARPNESS);
 		RegistryEntry<Enchantment> density = getEnchantment(world, Enchantments.DENSITY);
-		RegistryEntry<Enchantment> lunge = getEnchantment(world, Enchantments.LUNGE);
 		RegistryEntry<Enchantment> unbreaking = getEnchantment(world, Enchantments.UNBREAKING);
 		RegistryEntry<Enchantment> protection = getEnchantment(world, Enchantments.PROTECTION);
+
+		// قراءة الـ Spear والـ Lunge ديناميكياً من السيرفر
+		Item spearItem = Registries.ITEM.get(Identifier.of("minecraft", "spear"));
+		RegistryKey<Enchantment> lungeKey = RegistryKey.of(RegistryKeys.ENCHANTMENT, Identifier.of("minecraft", "lunge"));
+		RegistryEntry<Enchantment> lungeEnchantment = getEnchantment(world, lungeKey);
 
 		boolean isNetheriteAllowed = (phase >= 4) && random.nextBoolean();
 
 		switch (category) {
-			case 0 -> { // أسلحة تقليدية (سيف / بلطة)
+			case 0 -> {
 				Item weaponItem = isNetheriteAllowed ? Items.NETHERITE_SWORD : Items.DIAMOND_SWORD;
 				ItemStack weapon = new ItemStack(weaponItem);
 				if (sharpness != null) weapon.addEnchantment(sharpness, 2 + random.nextInt(3));
 				if (unbreaking != null) weapon.addEnchantment(unbreaking, 1 + random.nextInt(3));
 				return weapon;
 			}
-			case 1 -> { // الأسلحة الجديدة (Mace & Spear)
+			case 1 -> { // Mace & Spear
 				if (random.nextBoolean()) {
-					// Mace بتطويرة Density
 					ItemStack mace = new ItemStack(Items.MACE);
 					if (density != null) mace.addEnchantment(density, 1 + random.nextInt(4));
 					if (unbreaking != null) mace.addEnchantment(unbreaking, 2);
 					return mace;
 				} else {
-					// Spear بتطويرة Lunge
-					ItemStack spear = new ItemStack(Items.SPEAR);
-					if (lunge != null) spear.addEnchantment(lunge, 1 + random.nextInt(3));
-					if (unbreaking != null) spear.addEnchantment(unbreaking, 2);
-					return spear;
+					// عمل Spear مع انشانت Lunge بأمان تام بدون خطأ كومبايلر
+					Item itemToGive = (spearItem != null && spearItem != Items.AIR) ? spearItem : Items.TRIDENT;
+					ItemStack spearStack = new ItemStack(itemToGive);
+					if (lungeEnchantment != null) {
+						spearStack.addEnchantment(lungeEnchantment, 1 + random.nextInt(3));
+					}
+					if (unbreaking != null) spearStack.addEnchantment(unbreaking, 2);
+					return spearStack;
 				}
 			}
-			case 2 -> { // دروع علوية (Chestplate)
+			case 2 -> {
 				Item armorItem = isNetheriteAllowed ? Items.NETHERITE_CHESTPLATE : Items.DIAMOND_CHESTPLATE;
 				ItemStack armor = new ItemStack(armorItem);
 				if (protection != null) armor.addEnchantment(protection, 2 + random.nextInt(3));
 				return armor;
 			}
-			case 3 -> { // بناطيل وأحذية (Leggings & Boots)
+			case 3 -> {
 				Item lowerArmor = random.nextBoolean() ? 
 						(isNetheriteAllowed ? Items.NETHERITE_LEGGINGS : Items.DIAMOND_LEGGINGS) : 
 						(isNetheriteAllowed ? Items.NETHERITE_BOOTS : Items.DIAMOND_BOOTS);
@@ -691,10 +696,10 @@ public class NightmareRealms implements ModInitializer {
 				if (protection != null) armor.addEnchantment(protection, 2 + random.nextInt(3));
 				return armor;
 			}
-			case 4 -> { // أطعمة وتفاح ذهبي
+			case 4 -> {
 				return new ItemStack(Items.GOLDEN_APPLE, 2 + random.nextInt(4));
 			}
-			default -> { // دايموند وموارد
+			default -> {
 				return new ItemStack(Items.DIAMOND, 3 + random.nextInt(5));
 			}
 		}
