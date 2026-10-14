@@ -59,7 +59,6 @@ public class NightmareRealms implements ModInitializer {
 	private static BlockPos arenaCenter;
 	private static final Random random = new Random();
 
-	// Mobs and Boss references
 	private static final List<net.minecraft.entity.mob.MobEntity> currentWaveMobs = new ArrayList<>();
 	private static EndermanEntity phase1Boss;
 	private static WitherSkeletonEntity phase2Boss;
@@ -154,6 +153,10 @@ public class NightmareRealms implements ModInitializer {
 		for (int i = 0; i < 6; i++) {
 			ZombieEntity zombie = new ZombieEntity(world);
 			zombie.refreshPositionAndAngles(arenaCenter.getX() + random.nextInt(10) - 5, arenaCenter.getY() + 1, arenaCenter.getZ() + random.nextInt(10) - 5, 0, 0);
+			
+			// خوذة لمنع الحرق من الشمس
+			zombie.equipStack(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+			zombie.equipStack(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
 			zombie.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 99999, 1));
 			zombie.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH, 99999, 1));
 			zombie.setCustomName(Text.literal("Berserk Zombie").formatted(Formatting.DARK_GREEN));
@@ -165,15 +168,26 @@ public class NightmareRealms implements ModInitializer {
 
 	private static void startWave2(ServerWorld world, ServerPlayerEntity player) {
 		buildColosseumArena(world, arenaCenter, ARENA_RADIUS, ARENA_HEIGHT, 1);
-		showCinematicIntro(player, "🏹 WAVE 2: SKELETON SNIPERS 🏹", "Watch Out for Reinforced Arrows!", Formatting.GOLD);
+		showCinematicIntro(player, "🏹 WAVE 2: SKELETON SNIPERS 🏹", "Watch Out for Deadly Arrows!", Formatting.GOLD);
 
 		bossBar.setName(Text.literal("Wave 2/7 - Skeleton Snipers").formatted(Formatting.GOLD, Formatting.BOLD));
 		bossBar.setColor(BossBar.Color.YELLOW);
+
+		RegistryEntry<Enchantment> power = getEnchantment(world, Enchantments.POWER);
+		RegistryEntry<Enchantment> punch = getEnchantment(world, Enchantments.PUNCH);
 
 		currentWaveMobs.clear();
 		for (int i = 0; i < 6; i++) {
 			SkeletonEntity skeleton = new SkeletonEntity(EntityType.SKELETON, world);
 			skeleton.refreshPositionAndAngles(arenaCenter.getX() + random.nextInt(12) - 6, arenaCenter.getY() + 1, arenaCenter.getZ() + random.nextInt(12) - 6, 0, 0);
+			
+			// تجهيز القوس والخوذة المانعة للشمس
+			ItemStack bow = new ItemStack(Items.BOW);
+			if (power != null) bow.addEnchantment(power, 3);
+			if (punch != null) bow.addEnchantment(punch, 2);
+			skeleton.equipStack(EquipmentSlot.MAINHAND, bow);
+			skeleton.equipStack(EquipmentSlot.HEAD, new ItemStack(Items.CHAINMAIL_HELMET));
+
 			skeleton.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, 99999, 1));
 			skeleton.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 99999, 1));
 			skeleton.setCustomName(Text.literal("Armored Sniper").formatted(Formatting.GOLD));
@@ -195,6 +209,7 @@ public class NightmareRealms implements ModInitializer {
 			SpiderEntity spider = new SpiderEntity(EntityType.SPIDER, world);
 			spider.refreshPositionAndAngles(arenaCenter.getX() + random.nextInt(12) - 6, arenaCenter.getY() + 1, arenaCenter.getZ() + random.nextInt(12) - 6, 0, 0);
 			spider.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH, 99999, 1));
+			spider.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 99999, 1));
 			spider.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION, 99999, 1));
 			spider.setCustomName(Text.literal("Venomous Stalker").formatted(Formatting.DARK_RED));
 			spider.setCustomNameVisible(true);
@@ -204,6 +219,7 @@ public class NightmareRealms implements ModInitializer {
 	}
 
 	private static void updateNormalMobWave() {
+		// تنظيف القائمة من الموبز الميتة فوراً
 		currentWaveMobs.removeIf(mob -> mob == null || !mob.isAlive() || mob.isRemoved());
 		float remainingPercent = (float) currentWaveMobs.size() / 6.0f;
 		bossBar.setPercent(Math.max(0.0f, remainingPercent));
@@ -211,7 +227,8 @@ public class NightmareRealms implements ModInitializer {
 		if (currentWaveMobs.isEmpty()) {
 			ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
 			dropRandomizedLoot(world, arenaCenter, currentPhase);
-			startCooldown(currentPhase, 300); // 15 ثواني
+			int nextPhase = currentPhase + 1;
+			startCooldown(nextPhase, 300); // 15 ثواني
 		}
 	}
 
@@ -246,7 +263,7 @@ public class NightmareRealms implements ModInitializer {
 			ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
 			dropRandomizedLoot(world, arenaCenter, 4);
 			phase1Boss = null;
-			startCooldown(4, 300); // 15 ثواني
+			startCooldown(5, 300); // 15 ثواني
 			return;
 		}
 
@@ -288,7 +305,7 @@ public class NightmareRealms implements ModInitializer {
 			ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
 			dropRandomizedLoot(world, arenaCenter, 5);
 			phase2Boss = null;
-			startCooldown(5, 300); // 15 ثواني
+			startCooldown(6, 300); // 15 ثواني
 			return;
 		}
 
@@ -337,7 +354,7 @@ public class NightmareRealms implements ModInitializer {
 			ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
 			dropRandomizedLoot(world, arenaCenter, 6);
 			ironTitanBoss = null;
-			startCooldown(6, 400); // 20 ثانية راحة قبل البيج بوس الأخير!
+			startCooldown(7, 400); // 20 ثانية راحة قبل البيج بوس الأخير!
 			return;
 		}
 
@@ -423,16 +440,16 @@ public class NightmareRealms implements ModInitializer {
 		ServerWorld world = (ServerWorld) bossBar.getPlayers().iterator().next().getEntityWorld();
 		ServerPlayerEntity player = bossBar.getPlayers().iterator().next();
 
-		if (currentPhase == 1) startWave2(world, player);
-		else if (currentPhase == 2) startWave3(world, player);
-		else if (currentPhase == 3) startBossEndermanActual();
-		else if (currentPhase == 4) startBossWitherSkeletonActual();
-		else if (currentPhase == 5) startBossIronTitanActual();
-		else if (currentPhase == 6) startBossFinalWitherActual();
+		if (currentPhase == 2) startWave2(world, player);
+		else if (currentPhase == 3) startWave3(world, player);
+		else if (currentPhase == 4) startBossEndermanActual();
+		else if (currentPhase == 5) startBossWitherSkeletonActual();
+		else if (currentPhase == 6) startBossIronTitanActual();
+		else if (currentPhase == 7) startBossFinalWitherActual();
 	}
 
-	private static void startCooldown(int completedPhase, int ticks) {
-		currentPhase = completedPhase;
+	private static void startCooldown(int nextPhase, int ticks) {
+		currentPhase = nextPhase;
 		cooldownTimer = ticks; // 300 ticks = 15s, 400 ticks = 20s
 		bossBar.setPercent(1.0f);
 	}
@@ -533,10 +550,13 @@ public class NightmareRealms implements ModInitializer {
 		return world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT).getOptional(key).orElse(null);
 	}
 
+	// ==================== نظام اللوت المتنوع المكتمل ====================
+
 	private static void dropRandomizedLoot(ServerWorld world, BlockPos pos, int phase) {
 		ItemStack specialReward = ItemStack.EMPTY;
 		RegistryEntry<Enchantment> sharpness = getEnchantment(world, Enchantments.SHARPNESS);
 		RegistryEntry<Enchantment> protection = getEnchantment(world, Enchantments.PROTECTION);
+		RegistryEntry<Enchantment> unbreaking = getEnchantment(world, Enchantments.UNBREAKING);
 
 		if (phase == 4) {
 			specialReward = new ItemStack(Items.NETHERITE_CHESTPLATE);
@@ -560,6 +580,7 @@ public class NightmareRealms implements ModInitializer {
 			world.spawnEntity(new ItemEntity(world, pos.getX(), pos.getY() + 1.0, pos.getZ(), specialReward));
 		}
 
+		// إسقاط لوت متتوع (أسلحة، خوذات، بناطيل، أحذية، تفاح ذهبي، وأحجار نادرة)
 		int numberOfItems = 3 + random.nextInt(phase + 1);
 		for (int i = 0; i < numberOfItems; i++) {
 			ItemStack lootItem = generateRandomItem(world, phase);
@@ -570,32 +591,41 @@ public class NightmareRealms implements ModInitializer {
 	}
 
 	private static ItemStack generateRandomItem(ServerWorld world, int phase) {
-		int category = random.nextInt(4);
+		int category = random.nextInt(5);
 
 		RegistryEntry<Enchantment> sharpness = getEnchantment(world, Enchantments.SHARPNESS);
+		RegistryEntry<Enchantment> power = getEnchantment(world, Enchantments.POWER);
 		RegistryEntry<Enchantment> unbreaking = getEnchantment(world, Enchantments.UNBREAKING);
 		RegistryEntry<Enchantment> protection = getEnchantment(world, Enchantments.PROTECTION);
 
 		boolean isNetheriteAllowed = (phase >= 4) && random.nextBoolean();
 
 		switch (category) {
-			case 0 -> {
+			case 0 -> { // أسلحة
 				Item weaponItem = isNetheriteAllowed ? Items.NETHERITE_SWORD : Items.DIAMOND_SWORD;
 				ItemStack weapon = new ItemStack(weaponItem);
 				if (sharpness != null) weapon.addEnchantment(sharpness, 2 + random.nextInt(3));
 				if (unbreaking != null) weapon.addEnchantment(unbreaking, 1 + random.nextInt(3));
 				return weapon;
 			}
-			case 1 -> {
+			case 1 -> { // دوع علوية
 				Item armorItem = isNetheriteAllowed ? Items.NETHERITE_CHESTPLATE : Items.DIAMOND_CHESTPLATE;
 				ItemStack armor = new ItemStack(armorItem);
 				if (protection != null) armor.addEnchantment(protection, 2 + random.nextInt(3));
 				return armor;
 			}
-			case 2 -> {
+			case 2 -> { // بناطيل وأحذية متوفرة الآن!
+				Item lowerArmor = random.nextBoolean() ? 
+						(isNetheriteAllowed ? Items.NETHERITE_LEGGINGS : Items.DIAMOND_LEGGINGS) : 
+						(isNetheriteAllowed ? Items.NETHERITE_BOOTS : Items.DIAMOND_BOOTS);
+				ItemStack armor = new ItemStack(lowerArmor);
+				if (protection != null) armor.addEnchantment(protection, 2 + random.nextInt(3));
+				return armor;
+			}
+			case 3 -> { // أطعمة وتفاح ذهبي
 				return new ItemStack(Items.GOLDEN_APPLE, 2 + random.nextInt(4));
 			}
-			default -> {
+			default -> { // أحجار كريمة ودايموند
 				return new ItemStack(Items.DIAMOND, 3 + random.nextInt(5));
 			}
 		}
